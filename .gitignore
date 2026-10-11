@@ -37,7 +37,8 @@ venv.bak/
 */.ipynb_checkpoints/*
 
 # Data directories and raw data files (never commit customer / raw data)
-data/
+data/raw/
+data/processed/
 *.csv
 *.tsv
 *.parquet
