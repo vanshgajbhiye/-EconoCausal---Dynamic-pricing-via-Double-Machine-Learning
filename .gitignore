@@ -1,0 +1,70 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Data directories and raw data files (never commit customer / raw data)
+data/
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.h5
+*.xlsx
+*.xls
+
+# Model artifacts and binary checkpoints
+models/*.pkl
+models/*.joblib
+models/*.onnx
+*.pkl
+*.joblib
+
+# Logs and experiment outputs
+*.log
+logs/
+experiment_outputs/
+
+# Environment variables and secrets
+.env
+.env.local
+*.secret
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
