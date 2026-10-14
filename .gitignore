@@ -36,6 +36,10 @@ venv.bak/
 .ipynb_checkpoints/
 */.ipynb_checkpoints/*
 
+# Pytest cache
+.pytest_cache/
+
+
 # Data directories and raw data files
 data/raw/
 data/processed/
