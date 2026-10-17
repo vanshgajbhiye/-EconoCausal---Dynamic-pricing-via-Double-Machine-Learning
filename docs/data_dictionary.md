@@ -58,3 +58,37 @@ Under the Double Machine Learning (DML) / Neyman-orthogonal framework:
 - **Imputation**: Missing values in continuous confounders ($X$) will be imputed using median/mean strategy from pre-treatment baselines.
 - **Missing Treatment ($T$) or Outcome ($Y$)**: Rows with null or corrupt $T$ or $Y$ will be dropped rather than imputed.
 - **Duplicate Records**: Deduped on `(product_id, date)`.
+
+---
+
+## 5. Indian E-Commerce Multi-Table Relational Mapping
+
+The project repository utilizes the **Indian E-Commerce Customer & Order Intelligence Dataset** located in `data/raw/` (ignored by Git for data safety):
+
+### Relational Join Strategy
+```mermaid
+erDiagram
+    ORDER_ITEMS ||--o{ ORDERS : "joined on order_id"
+    ORDER_ITEMS ||--o{ PRODUCTS : "joined on product_id"
+    ORDERS ||--o{ CUSTOMERS : "joined on customer_id"
+```
+
+| Table | Joined On | Key Fields Used | Causal Role |
+| :--- | :--- | :--- | :--- |
+| `order_items.csv` | Primary grain | `quantity` | **Outcome ($Y$)** |
+| | | `discount_percentage`, `unit_price` | **Treatment ($T$)** |
+| | | `item_cost` | Pre-treatment baseline cost |
+| `orders.csv` | `order_id` | `order_date` -> `day_of_week`, `month`, `is_weekend` | **Confounder ($X$)** |
+| | | `marketing_channel`, `coupon_code` | **Confounder ($X$)** |
+| `products.csv` | `product_id` | `category`, `brand` | **Confounder ($X$)** |
+| | | `rating_average`, `stock_quantity` (inventory) | **Confounder ($X$)** |
+| `customers.csv` | `customer_id` | `customer_segment` (Budget / Regular / Premium) | **Confounder / Moderator ($X$)** |
+| | | `loyalty_tier`, `age_group`, `state` | **Confounder / Moderator ($X$)** |
+
+### Leakage Exclusion Notice
+The following tables and features are explicitly excluded from $X$ because they occur post-purchase:
+- `returns.csv`: Product returns happen after delivery.
+- `customer_reviews.csv`: Review scores occur after purchase.
+- `shipments.csv`: Logistics and delivery delays occur post-purchase.
+- `order_items.profit`: Profit is mechanically derived from price and quantity ($Y \times T$).
+

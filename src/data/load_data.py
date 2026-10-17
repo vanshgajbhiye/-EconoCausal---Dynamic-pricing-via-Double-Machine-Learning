@@ -5,8 +5,10 @@ and the backend schema (SalesRecord).
 """
 
 from typing import Any, Dict, List, Optional, Tuple
+import os
 import numpy as np
 import pandas as pd
+
 
 
 # Canonical columns and causal roles defined in docs/data_dictionary.md
@@ -353,3 +355,92 @@ def summarize_data_quality(df: pd.DataFrame) -> Dict[str, Any]:
         }
 
     return summary
+
+
+def load_and_merge_ecommerce_dataset(
+    data_dir: str = "data/raw",
+    sample_size: Optional[int] = None,
+    random_state: int = 42,
+) -> pd.DataFrame:
+    """Load and merge relational tables from Indian E-Commerce dataset.
+
+    Performs left-joins:
+    - order_items (primary transaction grain)
+    - orders (order_date, coupon_code, marketing_channel)
+    - products (category, brand, cost_price, stock_quantity, rating_average)
+    - customers (customer_segment, loyalty_tier, age_group, state)
+
+    Features engineered:
+    - day_of_week, month, is_weekend
+    - is_coupon_applied, is_promotion
+    - standardized aliases: discount_pct, price, units_sold, inventory_level
+
+    Parameters
+    ----------
+    data_dir : str
+        Path to folder with raw CSVs.
+    sample_size : Optional[int]
+        Number of order_items to sample (useful for quick experiments/testing).
+    random_state : int
+        Seed for reproducible sampling.
+
+    Returns
+    -------
+    pd.DataFrame
+        Enriched DataFrame ready for preprocessing and causal DML modeling.
+    """
+    order_items_path = os.path.join(data_dir, "order_items.csv")
+    orders_path = os.path.join(data_dir, "orders.csv")
+    products_path = os.path.join(data_dir, "products.csv")
+    customers_path = os.path.join(data_dir, "customers.csv")
+
+    for path in [order_items_path, orders_path, products_path, customers_path]:
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Required table not found at: {path}")
+
+    # 1. Load primary transaction line items
+    order_items = pd.read_csv(order_items_path)
+    if sample_size is not None and sample_size < len(order_items):
+        order_items = order_items.sample(n=sample_size, random_state=random_state).reset_index(drop=True)
+
+    # 2. Load dimension tables
+    orders = pd.read_csv(orders_path)
+    products = pd.read_csv(products_path)
+    customers = pd.read_csv(customers_path)
+
+    # 3. Perform relational merges
+    orders_cols = ["order_id", "customer_id", "order_date", "coupon_code", "marketing_channel"]
+    products_cols = [
+        "product_id",
+        "category",
+        "subcategory",
+        "brand",
+        "cost_price",
+        "stock_quantity",
+        "rating_average",
+    ]
+    customers_cols = ["customer_id", "customer_segment", "loyalty_tier", "age_group", "state"]
+
+    merged = order_items.merge(orders[orders_cols], on="order_id", how="left")
+    merged = merged.merge(products[products_cols], on="product_id", how="left")
+    merged = merged.merge(customers[customers_cols], on="customer_id", how="left")
+
+    # 4. Feature engineering for temporal & promotional confounders
+    order_dates = pd.to_datetime(merged["order_date"], errors="coerce")
+    merged["day_of_week"] = order_dates.dt.dayofweek
+    merged["month"] = order_dates.dt.month
+    merged["is_weekend"] = merged["day_of_week"].isin([5, 6]).astype(int)
+
+    merged["is_coupon_applied"] = merged["coupon_code"].notna().astype(int)
+    merged["is_promotion"] = (
+        (merged["discount_percentage"] > 0) | (merged["is_coupon_applied"] == 1)
+    ).astype(int)
+
+    # 5. Standardize column names matching data dictionary
+    merged["discount_pct"] = merged["discount_percentage"]
+    merged["price"] = merged["unit_price"]
+    merged["units_sold"] = merged["quantity"]
+    merged["inventory_level"] = merged["stock_quantity"]
+
+    return merged
+

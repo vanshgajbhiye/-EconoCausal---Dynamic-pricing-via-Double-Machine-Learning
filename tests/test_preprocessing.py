@@ -10,9 +10,11 @@ from src.data.load_data import (
     DEFAULT_TREATMENT_COL,
     extract_causal_matrices,
     generate_synthetic_retail_data,
+    load_and_merge_ecommerce_dataset,
     summarize_data_quality,
     validate_schema,
 )
+
 
 
 @pytest.fixture
@@ -115,3 +117,44 @@ def test_summarize_data_quality(valid_dataframe: pd.DataFrame):
     assert "units_sold_summary" in summary
     assert summary["price_summary"]["min"] > 0
     assert summary["units_sold_summary"]["min"] >= 0
+
+
+def test_load_and_merge_ecommerce_dataset():
+    """Test loading and relational merging of Indian E-Commerce dataset."""
+    df = load_and_merge_ecommerce_dataset(data_dir="data/raw", sample_size=50)
+
+    assert len(df) == 50
+    assert "discount_pct" in df.columns
+    assert "price" in df.columns
+    assert "units_sold" in df.columns
+    assert "cost_price" in df.columns
+    assert "customer_segment" in df.columns
+    assert "loyalty_tier" in df.columns
+    assert "day_of_week" in df.columns
+    assert "is_weekend" in df.columns
+
+    # Verify constraints
+    assert (df["price"] > 0).all()
+    assert (df["units_sold"] >= 0).all()
+    assert (df["discount_pct"] >= 0).all()
+    assert (df["discount_pct"] <= 100).all()
+
+
+def test_extract_causal_matrices_ecommerce():
+    """Test causal matrix extraction on merged Indian E-Commerce dataset."""
+    df = load_and_merge_ecommerce_dataset(data_dir="data/raw", sample_size=50)
+    confounder_cols = ["cost_price", "inventory_level", "day_of_week", "month", "is_weekend"]
+
+    X, T, Y = extract_causal_matrices(
+        df,
+        treatment_col="discount_pct",
+        outcome_col="units_sold",
+        confounder_cols=confounder_cols,
+    )
+
+    assert len(X) == len(T) == len(Y) == 50
+    assert list(X.columns) == confounder_cols
+    assert T.name == "discount_pct"
+    assert Y.name == "units_sold"
+    assert "units_sold" not in X.columns
+
