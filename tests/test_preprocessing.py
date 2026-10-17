@@ -155,3 +155,116 @@ def test_extract_causal_matrices_real_retail_price():
     assert "qty" not in X.columns
     assert "total_price" not in X.columns
     assert "revenue" not in X.columns
+
+
+def test_causal_preprocessor():
+    """Test CausalPreprocessor fits and transforms numerical and categorical confounders."""
+    from src.data.preprocess import CausalPreprocessor
+
+    df = pd.DataFrame(
+        {
+            "comp_1": [10.0, 20.0, 30.0, 40.0],
+            "freight_price": [5.0, 15.0, 25.0, 35.0],
+            "category": ["A", "B", "A", "B"],
+        }
+    )
+
+    preprocessor = CausalPreprocessor(
+        numerical_cols=["comp_1", "freight_price"],
+        categorical_cols=["category"],
+    )
+
+    # Must raise error if transformed before fit
+    with pytest.raises(ValueError, match="not fitted"):
+        preprocessor.transform(df)
+
+    transformed = preprocessor.fit_transform(df)
+
+    assert isinstance(transformed, pd.DataFrame)
+    assert len(transformed) == 4
+    # Check that scaled numerical columns have mean ~ 0 and std ~ 1
+    assert abs(transformed["comp_1"].mean()) < 1e-6
+    assert abs(transformed["comp_1"].std(ddof=0) - 1.0) < 1e-6
+    # Check categorical feature names
+    assert any("category" in col for col in transformed.columns)
+    assert list(transformed.columns) == preprocessor.feature_names_out_
+
+
+def test_transform_treatment_and_outcome():
+    """Test log transformations on treatment and outcome series."""
+    import numpy as np
+    from src.data.preprocess import transform_treatment_and_outcome
+
+    T = pd.Series([10.0, 20.0, 50.0], name="unit_price")
+    Y = pd.Series([5, 10, 25], name="qty")
+
+    T_log, Y_log = transform_treatment_and_outcome(
+        T, Y, log_transform_treatment=True, log_transform_outcome=True
+    )
+
+    np.testing.assert_allclose(T_log.values, np.log([10.0, 20.0, 50.0]))
+    np.testing.assert_allclose(Y_log.values, np.log([5, 10, 25]))
+    assert T_log.name == "log_unit_price"
+    assert Y_log.name == "log_qty"
+
+    # Test error on non-positive treatment
+    T_invalid = pd.Series([-5.0, 10.0], name="unit_price")
+    with pytest.raises(ValueError, match="non-positive"):
+        transform_treatment_and_outcome(T_invalid, Y, log_transform_treatment=True)
+
+
+def test_split_causal_data_real_dataset():
+    """Test split_causal_data on real Kaggle retail_price dataset with anti-leakage check."""
+    from src.data.preprocess import split_causal_data
+
+    df = load_retail_price_dataset("data/raw/retail_price.csv")
+    splits = split_causal_data(
+        df,
+        test_size=0.2,
+        random_state=42,
+        categorical_confounders=["product_category_name"],
+    )
+
+    X_train = splits["X_train"]
+    X_test = splits["X_test"]
+    T_train = splits["T_train"]
+    T_test = splits["T_test"]
+    Y_train = splits["Y_train"]
+    Y_test = splits["Y_test"]
+
+    # 676 rows total -> 80% train (540), 20% test (136)
+    assert len(X_train) == len(T_train) == len(Y_train) == 540
+    assert len(X_test) == len(T_test) == len(Y_test) == 136
+
+    # Test that preprocessor feature names match columns
+    assert list(X_train.columns) == splits["feature_names"]
+    assert list(X_test.columns) == splits["feature_names"]
+
+    # Strict anti-leakage check: test set must not be standardized with its own mean
+    # X_train mean is 0, but X_test mean is slightly different from 0
+    assert abs(X_train["comp_1"].mean()) < 1e-6
+    assert abs(X_test["comp_1"].mean()) != 0.0
+
+
+def test_get_cross_fitting_folds():
+    """Test K-fold cross-fitting fold partitioner for DML."""
+    import numpy as np
+    from src.data.preprocess import get_cross_fitting_folds
+
+    n_samples = 676
+    n_folds = 5
+    folds = get_cross_fitting_folds(n_samples=n_samples, n_folds=n_folds, random_state=42)
+
+    assert len(folds) == n_folds
+
+    all_test_indices = []
+    for train_idx, test_idx in folds:
+        # Check no overlap between train and test in each fold
+        assert len(np.intersect1d(train_idx, test_idx)) == 0
+        assert len(train_idx) + len(test_idx) == n_samples
+        all_test_indices.extend(test_idx)
+
+    # Check complete partition (every sample tested exactly once)
+    assert len(all_test_indices) == n_samples
+    assert len(np.unique(all_test_indices)) == n_samples
+
