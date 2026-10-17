@@ -1,34 +1,42 @@
 """Data loading, schema validation, and causal feature extraction module.
 
-Adheres to the causal variable contract specified in docs/data_dictionary.md
-and the backend schema (SalesRecord).
+Configured for the official Kaggle dataset:
+'Retail Price Optimization' (retail_price.csv)
+URL: https://www.kaggle.com/datasets/suddharshan/retail-price-optimization
 """
 
-from typing import Any, Dict, List, Optional, Tuple
 import os
+from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
 
-
 # Canonical columns and causal roles defined in docs/data_dictionary.md
-DEFAULT_TREATMENT_COL = "price"
-DEFAULT_OUTCOME_COL = "units_sold"
+DEFAULT_TREATMENT_COL = "unit_price"
+DEFAULT_OUTCOME_COL = "qty"
 DEFAULT_CONFOUNDER_COLS = [
-    "competitor_price",
-    "is_promotion",
-    "seasonality_index",
-    "inventory_level",
-    "day_of_week",
+    "comp_1",
+    "comp_2",
+    "comp_3",
+    "fp1",
+    "fp2",
+    "fp3",
+    "product_score",
+    "customers",
+    "s",
+    "weekday",
+    "holiday",
+    "lag_price",
+    "freight_price",
 ]
 
 # Post-treatment or outcome variables that must never leak into confounder matrix X
 EXCLUDED_FROM_CONFOUNDERS = {
+    "qty",
     "units_sold",
+    "total_price",
     "revenue",
     "profit",
-    "return_rate",
-    "customer_rating",
 }
 
 
@@ -52,12 +60,47 @@ def load_dataset(filepath: str) -> pd.DataFrame:
     ValueError
         If unsupported file format.
     """
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"File not found: {filepath}")
+
     if filepath.endswith(".csv"):
         return pd.read_csv(filepath)
     elif filepath.endswith(".parquet") or filepath.endswith(".pq"):
         return pd.read_parquet(filepath)
     else:
         raise ValueError(f"Unsupported file format for {filepath}. Expected .csv or .parquet")
+
+
+def load_retail_price_dataset(filepath: str = "data/raw/retail_price.csv") -> pd.DataFrame:
+    """Load and validate the official Kaggle Retail Price Optimization dataset.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to retail_price.csv.
+
+    Returns
+    -------
+    pd.DataFrame
+        Cleaned, validated retail price DataFrame with standardized aliases.
+    """
+    df = load_dataset(filepath)
+
+    # Standardize aliases for backward compatibility with backend
+    df["price"] = df["unit_price"]
+    df["units_sold"] = df["qty"]
+    df["revenue"] = df["total_price"]
+
+    validation = validate_schema(
+        df,
+        treatment_col="unit_price",
+        outcome_col="qty",
+        confounder_cols=DEFAULT_CONFOUNDER_COLS,
+    )
+    if not validation["is_valid"]:
+        raise ValueError(f"Retail price dataset validation failed: {validation['errors']}")
+
+    return df
 
 
 def validate_schema(
@@ -73,9 +116,9 @@ def validate_schema(
     df : pd.DataFrame
         Dataset to validate.
     treatment_col : str
-        Name of treatment column (e.g., 'price' or 'discount_pct').
+        Name of treatment column (e.g., 'unit_price').
     outcome_col : str
-        Name of outcome column (e.g., 'units_sold').
+        Name of outcome column (e.g., 'qty').
     confounder_cols : List[str], optional
         List of pre-treatment confounder columns.
 
@@ -110,7 +153,7 @@ def validate_schema(
     if missing_cols:
         errors.append(f"Missing required columns: {missing_cols}")
 
-    # If critical columns missing, cannot perform value checks safely
+    # If critical columns missing, return early
     if errors:
         return {
             "is_valid": False,
@@ -126,38 +169,35 @@ def validate_schema(
         errors.append(f"Post-treatment leakage detected in confounders: {leakage}")
 
     # 3. Treatment constraints: price must be strictly positive
-    if treatment_col == "price":
+    if treatment_col in ["unit_price", "price"]:
         invalid_treatment = (df[treatment_col] <= 0).sum()
         if invalid_treatment > 0:
-            errors.append(f"Found {invalid_treatment} rows with price <= 0. Price must be strictly positive.")
-    elif treatment_col == "discount_pct":
-        invalid_discount = ((df[treatment_col] < 0) | (df[treatment_col] > 100)).sum()
-        if invalid_discount > 0:
-            errors.append(f"Found {invalid_discount} rows with discount_pct outside [0, 100].")
+            errors.append(
+                f"Found {invalid_treatment} rows with {treatment_col} <= 0. Price must be strictly positive."
+            )
 
-    # 4. Outcome constraints: units_sold must be non-negative
-    if outcome_col == "units_sold":
+    # 4. Outcome constraints: qty must be non-negative
+    if outcome_col in ["qty", "units_sold"]:
         invalid_outcome = (df[outcome_col] < 0).sum()
         if invalid_outcome > 0:
-            errors.append(f"Found {invalid_outcome} rows with units_sold < 0.")
+            errors.append(f"Found {invalid_outcome} rows with {outcome_col} < 0.")
 
-    # 5. Check competitor price and inventory non-negativity
-    if "competitor_price" in df.columns and (df["competitor_price"] < 0).sum() > 0:
-        errors.append("Found rows with negative competitor_price.")
-    if "inventory_level" in df.columns and (df["inventory_level"] < 0).sum() > 0:
-        errors.append("Found rows with negative inventory_level.")
+    # 5. Check competitor price and freight non-negativity
+    for comp in ["comp_1", "comp_2", "comp_3"]:
+        if comp in df.columns and (df[comp] <= 0).sum() > 0:
+            warnings.append(f"Found rows with {comp} <= 0.")
 
-    # 6. Seasonality index positivity
-    if "seasonality_index" in df.columns and (df["seasonality_index"] <= 0).sum() > 0:
-        warnings.append("Found rows with seasonality_index <= 0. Seasonality index should be positive.")
+    for fp in ["freight_price", "fp1", "fp2", "fp3"]:
+        if fp in df.columns and (df[fp] < 0).sum() > 0:
+            errors.append(f"Found rows with negative {fp}.")
 
-    # 7. Missing value checks
+    # 6. Missing value checks
     missing_summary = df[required_cols].isnull().sum()
     cols_with_nulls = missing_summary[missing_summary > 0]
     if not cols_with_nulls.empty:
         warnings.append(f"Columns containing null values: {cols_with_nulls.to_dict()}")
 
-    # 8. Duplicate check
+    # 7. Duplicate check
     duplicate_count = int(df.duplicated().sum())
     if duplicate_count > 0:
         warnings.append(f"Found {duplicate_count} duplicate rows in dataset.")
@@ -236,100 +276,68 @@ def generate_synthetic_retail_data(
     true_elasticity: float = -1.75,
     random_seed: int = 42,
 ) -> pd.DataFrame:
-    """Generate reproducible synthetic retail transactions matching backend schema.
-
-    Follows econometric demand-price relationships:
-    Q = Q0 * (P / P0)^true_elasticity * Confounder_effects * Noise
-
-    Used for testing, baseline pipeline verification, and benchmark validation
-    until real transaction datasets are provided.
-
-    Parameters
-    ----------
-    n_samples : int
-        Number of transaction records to generate.
-    base_price : float
-        Reference price for normalization.
-    true_elasticity : float
-        Target ground-truth price elasticity for causal verification.
-    random_seed : int
-        Seed for reproducibility.
-
-    Returns
-    -------
-    pd.DataFrame
-        Simulated retail transaction DataFrame adhering to docs/data_dictionary.md.
-    """
+    """Generate reproducible synthetic retail transactions matching schema for unit tests."""
     rng = np.random.default_rng(random_seed)
 
-    # 1. Confounders (X)
-    is_promotion = rng.binomial(1, 0.2, size=n_samples)
-    seasonality_index = np.round(1.0 + 0.25 * np.sin(np.linspace(0, 4 * np.pi, n_samples)), 2)
-    competitor_price = np.round(base_price * (0.90 + 0.20 * rng.uniform(size=n_samples)), 2)
-    inventory_level = rng.integers(50, 400, size=n_samples)
-    day_of_week = rng.integers(0, 7, size=n_samples)
+    comp_1 = np.round(base_price * (0.90 + 0.20 * rng.uniform(size=n_samples)), 2)
+    comp_2 = np.round(base_price * (0.85 + 0.30 * rng.uniform(size=n_samples)), 2)
+    comp_3 = np.round(base_price * (0.80 + 0.35 * rng.uniform(size=n_samples)), 2)
 
-    # 2. Treatment (T = price) influenced by confounders (endogeneity/confounding)
-    # Retailers typically discount when competitor price is lower, or during promotions
-    price_factor = 1.0 - 0.10 * is_promotion + 0.05 * (competitor_price / base_price - 1.0)
-    jitter = rng.normal(0, 0.05, size=n_samples)
-    price = np.round(base_price * (price_factor + jitter), 2)
-    # Ensure price strictly positive
-    price = np.clip(price, base_price * 0.5, base_price * 1.8)
+    fp1 = np.round(10.0 + 5.0 * rng.uniform(size=n_samples), 2)
+    fp2 = np.round(10.0 + 5.0 * rng.uniform(size=n_samples), 2)
+    fp3 = np.round(10.0 + 5.0 * rng.uniform(size=n_samples), 2)
+    freight_price = np.round(12.0 + 4.0 * rng.uniform(size=n_samples), 2)
 
-    discount_pct = np.where(price < base_price, np.round((1 - price / base_price) * 100, 1), 0.0)
+    product_score = np.round(3.5 + 1.5 * rng.uniform(size=n_samples), 1)
+    customers = rng.integers(10, 200, size=n_samples)
+    s = np.round(1.0 + 0.3 * np.sin(np.linspace(0, 4 * np.pi, n_samples)), 2)
+    weekday = rng.integers(15, 23, size=n_samples)
+    holiday = rng.integers(0, 5, size=n_samples)
+    lag_price = np.round(base_price * (0.95 + 0.1 * rng.uniform(size=n_samples)), 2)
 
-    # 3. Outcome (Y = units_sold)
-    # True structural demand function: log(Q) = log(Q0) + elasticity * log(P/P0) + gamma*X + noise
-    base_demand = 80.0
-    promo_effect = 1.35 * is_promotion + 1.0 * (1 - is_promotion)
-    competitor_effect = np.where(price < competitor_price, 1.15, 0.90)
-    noise = rng.lognormal(mean=0.0, sigma=0.1, size=n_samples)
+    price_jitter = rng.normal(0, 0.05, size=n_samples)
+    unit_price = np.round(base_price * (1.0 + price_jitter), 2)
+    unit_price = np.clip(unit_price, base_price * 0.5, base_price * 1.8)
 
-    relative_price = price / base_price
-    demand = (
-        base_demand
-        * np.power(relative_price, true_elasticity)
-        * promo_effect
-        * competitor_effect
-        * seasonality_index
-        * noise
-    )
-    units_sold = np.maximum(1, np.round(demand)).astype(int)
-    revenue = np.round(price * units_sold, 2)
+    relative_price = unit_price / base_price
+    demand = 80.0 * np.power(relative_price, true_elasticity) * s * rng.lognormal(0, 0.1, n_samples)
+    qty = np.maximum(1, np.round(demand)).astype(int)
+    total_price = np.round(unit_price * qty, 2)
 
     df = pd.DataFrame(
         {
-            "product_id": ["PROD-TECH-001"] * n_samples,
-            "date": pd.date_range("2026-01-01", periods=n_samples, freq="D").strftime("%Y-%m-%d"),
-            "price": price,
-            "discount_pct": discount_pct,
-            "units_sold": units_sold,
-            "revenue": revenue,
-            "competitor_price": competitor_price,
-            "is_promotion": is_promotion,
-            "seasonality_index": seasonality_index,
-            "inventory_level": inventory_level,
-            "day_of_week": day_of_week,
+            "product_id": ["bed1"] * n_samples,
+            "product_category_name": ["bed_bath_table"] * n_samples,
+            "month_year": ["01-05-2017"] * n_samples,
+            "unit_price": unit_price,
+            "qty": qty,
+            "total_price": total_price,
+            "comp_1": comp_1,
+            "comp_2": comp_2,
+            "comp_3": comp_3,
+            "fp1": fp1,
+            "fp2": fp2,
+            "fp3": fp3,
+            "product_score": product_score,
+            "customers": customers,
+            "s": s,
+            "weekday": weekday,
+            "holiday": holiday,
+            "lag_price": lag_price,
+            "freight_price": freight_price,
         }
     )
+
+    # Aliases
+    df["price"] = df["unit_price"]
+    df["units_sold"] = df["qty"]
+    df["revenue"] = df["total_price"]
 
     return df
 
 
 def summarize_data_quality(df: pd.DataFrame) -> Dict[str, Any]:
-    """Produce summary statistics and data quality diagnostics for dataset.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Dataset to analyze.
-
-    Returns
-    -------
-    Dict[str, Any]
-        Diagnostic summary including counts, nulls, price distribution, and correlation.
-    """
+    """Produce summary statistics and data quality diagnostics for dataset."""
     summary = {
         "total_records": len(df),
         "total_columns": len(df.columns),
@@ -337,110 +345,24 @@ def summarize_data_quality(df: pd.DataFrame) -> Dict[str, Any]:
         "duplicates": int(df.duplicated().sum()),
     }
 
-    if "price" in df.columns:
+    price_col = "unit_price" if "unit_price" in df.columns else ("price" if "price" in df.columns else None)
+    qty_col = "qty" if "qty" in df.columns else ("units_sold" if "units_sold" in df.columns else None)
+
+    if price_col:
         summary["price_summary"] = {
-            "min": float(df["price"].min()),
-            "median": float(df["price"].median()),
-            "mean": float(df["price"].mean()),
-            "max": float(df["price"].max()),
-            "std": float(df["price"].std()),
+            "min": float(df[price_col].min()),
+            "median": float(df[price_col].median()),
+            "mean": float(df[price_col].mean()),
+            "max": float(df[price_col].max()),
+            "std": float(df[price_col].std()),
         }
 
-    if "units_sold" in df.columns:
-        summary["units_sold_summary"] = {
-            "min": int(df["units_sold"].min()),
-            "median": float(df["units_sold"].median()),
-            "mean": float(df["units_sold"].mean()),
-            "max": int(df["units_sold"].max()),
+    if qty_col:
+        summary["qty_summary"] = {
+            "min": int(df[qty_col].min()),
+            "median": float(df[qty_col].median()),
+            "mean": float(df[qty_col].mean()),
+            "max": int(df[qty_col].max()),
         }
 
     return summary
-
-
-def load_and_merge_ecommerce_dataset(
-    data_dir: str = "data/raw",
-    sample_size: Optional[int] = None,
-    random_state: int = 42,
-) -> pd.DataFrame:
-    """Load and merge relational tables from Indian E-Commerce dataset.
-
-    Performs left-joins:
-    - order_items (primary transaction grain)
-    - orders (order_date, coupon_code, marketing_channel)
-    - products (category, brand, cost_price, stock_quantity, rating_average)
-    - customers (customer_segment, loyalty_tier, age_group, state)
-
-    Features engineered:
-    - day_of_week, month, is_weekend
-    - is_coupon_applied, is_promotion
-    - standardized aliases: discount_pct, price, units_sold, inventory_level
-
-    Parameters
-    ----------
-    data_dir : str
-        Path to folder with raw CSVs.
-    sample_size : Optional[int]
-        Number of order_items to sample (useful for quick experiments/testing).
-    random_state : int
-        Seed for reproducible sampling.
-
-    Returns
-    -------
-    pd.DataFrame
-        Enriched DataFrame ready for preprocessing and causal DML modeling.
-    """
-    order_items_path = os.path.join(data_dir, "order_items.csv")
-    orders_path = os.path.join(data_dir, "orders.csv")
-    products_path = os.path.join(data_dir, "products.csv")
-    customers_path = os.path.join(data_dir, "customers.csv")
-
-    for path in [order_items_path, orders_path, products_path, customers_path]:
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Required table not found at: {path}")
-
-    # 1. Load primary transaction line items
-    order_items = pd.read_csv(order_items_path)
-    if sample_size is not None and sample_size < len(order_items):
-        order_items = order_items.sample(n=sample_size, random_state=random_state).reset_index(drop=True)
-
-    # 2. Load dimension tables
-    orders = pd.read_csv(orders_path)
-    products = pd.read_csv(products_path)
-    customers = pd.read_csv(customers_path)
-
-    # 3. Perform relational merges
-    orders_cols = ["order_id", "customer_id", "order_date", "coupon_code", "marketing_channel"]
-    products_cols = [
-        "product_id",
-        "category",
-        "subcategory",
-        "brand",
-        "cost_price",
-        "stock_quantity",
-        "rating_average",
-    ]
-    customers_cols = ["customer_id", "customer_segment", "loyalty_tier", "age_group", "state"]
-
-    merged = order_items.merge(orders[orders_cols], on="order_id", how="left")
-    merged = merged.merge(products[products_cols], on="product_id", how="left")
-    merged = merged.merge(customers[customers_cols], on="customer_id", how="left")
-
-    # 4. Feature engineering for temporal & promotional confounders
-    order_dates = pd.to_datetime(merged["order_date"], errors="coerce")
-    merged["day_of_week"] = order_dates.dt.dayofweek
-    merged["month"] = order_dates.dt.month
-    merged["is_weekend"] = merged["day_of_week"].isin([5, 6]).astype(int)
-
-    merged["is_coupon_applied"] = merged["coupon_code"].notna().astype(int)
-    merged["is_promotion"] = (
-        (merged["discount_percentage"] > 0) | (merged["is_coupon_applied"] == 1)
-    ).astype(int)
-
-    # 5. Standardize column names matching data dictionary
-    merged["discount_pct"] = merged["discount_percentage"]
-    merged["price"] = merged["unit_price"]
-    merged["units_sold"] = merged["quantity"]
-    merged["inventory_level"] = merged["stock_quantity"]
-
-    return merged
-

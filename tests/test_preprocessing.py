@@ -1,6 +1,8 @@
-"""Unit tests for data loading, schema validation, and causal feature extraction."""
+"""Unit tests for data loading, schema validation, and causal feature extraction.
 
-import numpy as np
+Tests against the official Kaggle Retail Price Optimization dataset.
+"""
+
 import pandas as pd
 import pytest
 
@@ -10,11 +12,10 @@ from src.data.load_data import (
     DEFAULT_TREATMENT_COL,
     extract_causal_matrices,
     generate_synthetic_retail_data,
-    load_and_merge_ecommerce_dataset,
+    load_retail_price_dataset,
     summarize_data_quality,
     validate_schema,
 )
-
 
 
 @pytest.fixture
@@ -26,16 +27,15 @@ def valid_dataframe() -> pd.DataFrame:
 def test_synthetic_data_schema(valid_dataframe: pd.DataFrame):
     """Test that synthetic data generator adheres to data dictionary specifications."""
     assert len(valid_dataframe) == 100
-    assert "price" in valid_dataframe.columns
-    assert "units_sold" in valid_dataframe.columns
+    assert "unit_price" in valid_dataframe.columns
+    assert "qty" in valid_dataframe.columns
     for col in DEFAULT_CONFOUNDER_COLS:
         assert col in valid_dataframe.columns
 
     # Verify constraints
-    assert (valid_dataframe["price"] > 0).all()
-    assert (valid_dataframe["units_sold"] >= 0).all()
-    assert (valid_dataframe["competitor_price"] >= 0).all()
-    assert set(valid_dataframe["is_promotion"].unique()).issubset({0, 1})
+    assert (valid_dataframe["unit_price"] > 0).all()
+    assert (valid_dataframe["qty"] >= 0).all()
+    assert (valid_dataframe["comp_1"] > 0).all()
 
 
 def test_validate_schema_valid(valid_dataframe: pd.DataFrame):
@@ -56,39 +56,39 @@ def test_validate_schema_empty():
 
 def test_validate_schema_missing_columns(valid_dataframe: pd.DataFrame):
     """Test validation fails when a required causal column is missing."""
-    corrupted_df = valid_dataframe.drop(columns=["price"])
+    corrupted_df = valid_dataframe.drop(columns=["unit_price"])
     result = validate_schema(corrupted_df)
     assert result["is_valid"] is False
-    assert any("price" in err for err in result["errors"])
+    assert any("unit_price" in err for err in result["errors"])
 
 
 def test_validate_schema_post_treatment_leakage(valid_dataframe: pd.DataFrame):
     """Test that adding post-treatment variables into confounders triggers validation error."""
-    # revenue is post-treatment (outcome * price) and must not be a confounder
+    # total_price is post-treatment (revenue = qty * unit_price) and must not be a confounder
     result = validate_schema(
         valid_dataframe,
-        confounder_cols=DEFAULT_CONFOUNDER_COLS + ["revenue"],
+        confounder_cols=DEFAULT_CONFOUNDER_COLS + ["total_price"],
     )
     assert result["is_valid"] is False
     assert any("leakage" in err.lower() for err in result["errors"])
 
 
 def test_validate_schema_invalid_price(valid_dataframe: pd.DataFrame):
-    """Test validation fails when price contains non-positive values."""
+    """Test validation fails when unit_price contains non-positive values."""
     corrupted_df = valid_dataframe.copy()
-    corrupted_df.loc[0, "price"] = -5.0
+    corrupted_df.loc[0, "unit_price"] = -5.0
     result = validate_schema(corrupted_df)
     assert result["is_valid"] is False
     assert any("price <= 0" in err for err in result["errors"])
 
 
-def test_validate_schema_invalid_units_sold(valid_dataframe: pd.DataFrame):
-    """Test validation fails when units_sold contains negative values."""
+def test_validate_schema_invalid_qty(valid_dataframe: pd.DataFrame):
+    """Test validation fails when qty contains negative values."""
     corrupted_df = valid_dataframe.copy()
-    corrupted_df.loc[0, "units_sold"] = -10
+    corrupted_df.loc[0, "qty"] = -10
     result = validate_schema(corrupted_df)
     assert result["is_valid"] is False
-    assert any("units_sold < 0" in err for err in result["errors"])
+    assert any("qty < 0" in err for err in result["errors"])
 
 
 def test_extract_causal_matrices(valid_dataframe: pd.DataFrame):
@@ -107,6 +107,7 @@ def test_extract_causal_matrices(valid_dataframe: pd.DataFrame):
     # Ensure no outcome leakage inside X
     assert DEFAULT_OUTCOME_COL not in X.columns
     assert DEFAULT_TREATMENT_COL not in X.columns
+    assert "total_price" not in X.columns
 
 
 def test_summarize_data_quality(valid_dataframe: pd.DataFrame):
@@ -114,47 +115,43 @@ def test_summarize_data_quality(valid_dataframe: pd.DataFrame):
     summary = summarize_data_quality(valid_dataframe)
     assert summary["total_records"] == 100
     assert "price_summary" in summary
-    assert "units_sold_summary" in summary
+    assert "qty_summary" in summary
     assert summary["price_summary"]["min"] > 0
-    assert summary["units_sold_summary"]["min"] >= 0
+    assert summary["qty_summary"]["min"] >= 0
 
 
-def test_load_and_merge_ecommerce_dataset():
-    """Test loading and relational merging of Indian E-Commerce dataset."""
-    df = load_and_merge_ecommerce_dataset(data_dir="data/raw", sample_size=50)
+def test_load_retail_price_dataset():
+    """Test loading and validation of official Kaggle retail_price.csv."""
+    df = load_retail_price_dataset("data/raw/retail_price.csv")
 
-    assert len(df) == 50
-    assert "discount_pct" in df.columns
-    assert "price" in df.columns
-    assert "units_sold" in df.columns
-    assert "cost_price" in df.columns
-    assert "customer_segment" in df.columns
-    assert "loyalty_tier" in df.columns
-    assert "day_of_week" in df.columns
-    assert "is_weekend" in df.columns
+    assert len(df) == 676
+    assert "unit_price" in df.columns
+    assert "qty" in df.columns
+    assert "comp_1" in df.columns
+    assert "s" in df.columns
+    assert "customers" in df.columns
+    assert "freight_price" in df.columns
+
+    # Verify zero nulls
+    assert df.isnull().sum().sum() == 0
 
     # Verify constraints
-    assert (df["price"] > 0).all()
-    assert (df["units_sold"] >= 0).all()
-    assert (df["discount_pct"] >= 0).all()
-    assert (df["discount_pct"] <= 100).all()
+    assert (df["unit_price"] > 0).all()
+    assert (df["qty"] >= 0).all()
+    assert (df["comp_1"] > 0).all()
 
 
-def test_extract_causal_matrices_ecommerce():
-    """Test causal matrix extraction on merged Indian E-Commerce dataset."""
-    df = load_and_merge_ecommerce_dataset(data_dir="data/raw", sample_size=50)
-    confounder_cols = ["cost_price", "inventory_level", "day_of_week", "month", "is_weekend"]
+def test_extract_causal_matrices_real_retail_price():
+    """Test extracting (X, T, Y) from official Kaggle retail_price.csv."""
+    df = load_retail_price_dataset("data/raw/retail_price.csv")
+    X, T, Y = extract_causal_matrices(df)
 
-    X, T, Y = extract_causal_matrices(
-        df,
-        treatment_col="discount_pct",
-        outcome_col="units_sold",
-        confounder_cols=confounder_cols,
-    )
+    assert len(X) == len(T) == len(Y) == 676
+    assert list(X.columns) == DEFAULT_CONFOUNDER_COLS
+    assert T.name == "unit_price"
+    assert Y.name == "qty"
 
-    assert len(X) == len(T) == len(Y) == 50
-    assert list(X.columns) == confounder_cols
-    assert T.name == "discount_pct"
-    assert Y.name == "units_sold"
-    assert "units_sold" not in X.columns
-
+    # Strict anti-leakage verification
+    assert "qty" not in X.columns
+    assert "total_price" not in X.columns
+    assert "revenue" not in X.columns
