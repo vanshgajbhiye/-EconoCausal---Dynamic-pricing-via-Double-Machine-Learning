@@ -136,3 +136,45 @@ This document records causal machine learning experiments, datasets used, baseli
      - Status: **PASSED** (Estimate is stable across data partitions).
 - **Overall Causal Robustness Score**: **100.0% (3/3 Refutation Checks Passed)**.
 - **Audit Conclusion**: Causal identification is statistically valid and robust.
+
+---
+
+### Experiment ID: EXP-20261021-05 (Dynamic Pricing Optimization & Counterfactual Uplift Simulation)
+- **Date**: 2026-10-21
+- **Author**: Rohit / Data Training
+- **Dataset Version / Source**: Official Kaggle Retail Price Optimization (`data/raw/retail_price.csv`), holdout evaluation partition (136 observations, 20% split)
+- **Underlying Causal Model**: Partially Linear Double Machine Learning (DML) with 5-fold cross-fitting and Heterogeneous CATE elasticity estimator.
+- **Optimization Formulation**:
+  - Demand specification: $Q(P) = Q_0 \cdot (P / P_0)^\theta$
+  - Analytical First-Order Condition for Profit: $P^* = c \cdot \left(\frac{\theta}{\theta + 1}\right)$ for $\theta < -1$.
+  - Inelastic Goods ($\theta \ge -1$): Monotonic margin expansion bounded at maximum allowed upper price boundary.
+  - Guardrails: Maximum allowable price discount $-30\%$, maximum markup $+20\%$, cost floor minimum gross margin $5\%$, charm pricing ending `.99`.
+- **Strategy Scenario Comparison**:
+  | Strategy | Total Revenue ($) | Revenue Uplift (%) | Total Profit ($) | Profit Uplift (%) | Total Units Sold | Units Uplift (%) | Average Margin (%) |
+  | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+  | **Status Quo (Baseline)** | $182,252.25 | 0.00% | $54,675.67 | 0.00% | 1,959.0 | 0.00% | 30.00% |
+  | **Flat 10% Discount** | $190,899.01 | +4.74% | $42,422.00 | -22.41% | 2,303.2 | +17.57% | 22.22% |
+  | **Flat 10% Markup** | $175,938.12 | -3.46% | $63,977.50 | +17.01% | 1,704.2 | -13.01% | 36.36% |
+  | **Competitor Benchmark** | $194,965.21 | +6.98% | $35,973.17 | -34.21% | 2,262.0 | +15.47% | 18.45% |
+  | **Causal Revenue Maximizer** | $226,687.85 | **+24.38%** | $35,305.23 | -35.43% | 3,015.7 | **+53.94%** | 15.57% |
+  | **Causal Profit Maximizer** | $173,683.29 | -4.70% | **$71,055.14** | **+29.96%** | 1,573.7 | -19.67% | **40.91%** |
+
+- **Category-Level Causal Optimization Breakdown**:
+  | Product Category | Samples | Mean Elasticity ($\hat{\theta}$) | Avg Base Price ($) | Avg Opt Price ($) | Avg Price Chg (%) | Net Profit Gain ($) | Profit Uplift (%) |
+  | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+  | `watches_gifts` | 21 | -0.464 | $139.56 | $166.99 | +19.7% | +$5,338.89 | **+42.4%** |
+  | `health_beauty` | 35 | -1.499 | $107.12 | $126.96 | +18.5% | +$3,706.51 | **+24.4%** |
+  | `cool_stuff` | 18 | -0.827 | $114.03 | $136.10 | +19.4% | +$2,299.79 | **+45.8%** |
+  | `garden_tools` | 30 | -1.640 | $69.14 | $81.32 | +17.6% | +$2,272.57 | **+19.8%** |
+  | `computers_accessories` | 8 | -1.412 | $137.58 | $162.37 | +18.0% | +$1,438.30 | **+22.4%** |
+  | `bed_bath_table` | 8 | -1.417 | $98.16 | $116.74 | +18.9% | +$769.59 | **+30.6%** |
+  | `perfumery` | 3 | -0.950 | $97.91 | $116.99 | +19.5% | +$267.11 | **+50.4%** |
+  | `furniture_decor` | 6 | -1.087 | $47.68 | $56.82 | +19.2% | +$167.88 | **+27.9%** |
+  | `consoles_games` | 7 | -1.089 | $26.36 | $30.99 | +17.6% | +$118.83 | **+35.6%** |
+
+- **Key Takeaways & Executive Findings**:
+  1. **Profit Expansion**: Causal profit maximization unlocks **+$16,379.47 (+29.96%)** in gross profit over baseline while expanding gross margin from **30.00% to 40.91%**.
+  2. **Every Category Gains Profit**: Because historical baseline pricing under-priced products relative to consumer willingness to pay, calibrating prices against causal elasticity improves margin across all 9 retail segments.
+  3. **Pitfalls of Naive Competitor Benchmarking**: Blindly matching competitor prices cuts profit by **-34.21%** ($-18,702.50 loss), highlighting the danger of ignoring cost structures and customer price sensitivity.
+  4. **Revenue vs Profit Duality**: If the corporate goal is market share / inventory clearance, the Causal Revenue Maximizer surges unit volume by **+53.94%** and top-line revenue by **+24.38%** ($226,687.85), providing dual actionable modes for business stakeholders.
+
