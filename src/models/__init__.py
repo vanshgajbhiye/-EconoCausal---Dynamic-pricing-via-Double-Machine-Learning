@@ -4,6 +4,7 @@ from src.models.cate import CATEEstimator
 from src.models.optimizer import DynamicPricingOptimizer, ItemOptimizationResult
 from src.models.refutation import CausalRefuter
 from src.models.train_dml import DoubleMachineLearning, train_dml_pipeline
+from src.pipeline import EconoCausalPipeline
 
 __all__ = [
     "DoubleMachineLearning",
@@ -12,4 +13,5 @@ __all__ = [
     "CausalRefuter",
     "DynamicPricingOptimizer",
     "ItemOptimizationResult",
+    "EconoCausalPipeline",
 ]

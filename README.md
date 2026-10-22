@@ -66,6 +66,33 @@ The project can be extended by integrating real-time sales data, developing an i
 
 This project is developed collaboratively using GitHub for version control, code sharing, task management, and tracking contributions. Team members can work on separate components, such as data preprocessing, causal modeling, pricing optimization, and visualization.
 
+## 🚀 Pipeline & CLI Quickstart
+
+### 1. Run Complete Test Suite
+```bash
+python -m pytest tests/ -v
+```
+
+### 2. Train Causal Pipeline
+```bash
+python -m src.cli train --data data/raw/retail_price.csv --save-model models/econocausal_pipeline.joblib
+```
+
+### 3. Generate Catalog Price Recommendations
+```bash
+python -m src.cli recommend --model models/econocausal_pipeline.joblib --data data/raw/retail_price.csv --output data/pricing_recommendations.csv --objective profit
+```
+
+### 4. Real-Time Single-SKU Pricing Inference
+```bash
+python -m src.cli predict-item --model models/econocausal_pipeline.joblib --category health_beauty --price 105.00 --cost 70.00 --comp-price 108.00
+```
+
+### 5. Multi-Strategy Counterfactual Uplift Simulation
+```bash
+python -m src.cli simulate --model models/econocausal_pipeline.joblib --data data/raw/retail_price.csv
+```
+
 📌 Conclusion
 
 EconoCausal aims to combine causal inference and machine learning to support more reliable pricing decisions. By estimating the causal impact of price changes rather than relying only on correlations, the project seeks to provide useful insights into demand behavior and help businesses develop more effective pricing strategies.

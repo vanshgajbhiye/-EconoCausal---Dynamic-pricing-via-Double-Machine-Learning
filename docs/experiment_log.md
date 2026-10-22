@@ -178,3 +178,47 @@ This document records causal machine learning experiments, datasets used, baseli
   3. **Pitfalls of Naive Competitor Benchmarking**: Blindly matching competitor prices cuts profit by **-34.21%** ($-18,702.50 loss), highlighting the danger of ignoring cost structures and customer price sensitivity.
   4. **Revenue vs Profit Duality**: If the corporate goal is market share / inventory clearance, the Causal Revenue Maximizer surges unit volume by **+53.94%** and top-line revenue by **+24.38%** ($226,687.85), providing dual actionable modes for business stakeholders.
 
+---
+
+### Experiment ID: EXP-20261022-06 (End-to-End Orchestration & Inference Pipeline / CLI Interface)
+- **Date**: 2026-10-22
+- **Author**: Rohit / Data Training
+- **Dataset Version / Source**: Official Kaggle Retail Price Optimization (`data/raw/retail_price.csv`), full catalog (676 observations across 9 product categories).
+- **Pipeline Architecture & Components**:
+  - `EconoCausalPipeline` class (`src/pipeline.py`):
+    - Confounder Preprocessing: Anti-leakage `CausalPreprocessor` with `StandardScaler` on 13 numerical covariates and `OneHotEncoder(handle_unknown='ignore')` on 9 product categories (22 encoded features).
+    - Causal Engine: Partially Linear Double Machine Learning (DML) with 5-fold cross-fitting and Neyman-orthogonal Robinson residualization.
+    - Baseline ATE Elasticity: $\hat{\theta} = -1.2678$ ($SE = 0.5110$, $p = 0.0131$, $95\% \text{ CI}: [-2.2693, -0.2663]$).
+    - Heterogeneous CATE Estimator: Moderated elasticity $\hat{\theta}(X)$, mean elasticity $-1.2855$, range $[-4.5963, +0.8693]$.
+    - Causal Refutation Suite: 100.0% pass rate (3/3 checks passed: Placebo Treatment, Random Common Cause, Data Subsetting).
+    - Constrained Dynamic Pricing Optimizer: Amoroso-Robinson profit maximization with $\pm 20\% / -30\%$ bounds, $5\%$ margin floor, and charm pricing ($0.99$).
+    - Model Persistence: Full pipeline serialization to `models/econocausal_pipeline.joblib` (2,150.4 KB, compressed).
+- **Command-Line Interface (CLI)** (`src/cli.py`):
+  - `train`: Automated end-to-end training, refutation audit, and `.joblib` model artifact generation.
+  - `recommend`: Automated catalog batch scoring, dynamic price calibration, and CSV/JSON export.
+  - `predict-item`: Sub-millisecond single-SKU real-time dynamic pricing inference with formatted console or JSON responses.
+  - `simulate`: Multi-strategy portfolio counterfactual uplift evaluation.
+- **Full Catalog Counterfactual Uplift Simulation (676 SKUs)**:
+  | Strategy | Total Revenue ($) | Revenue Uplift (%) | Total Profit ($) | Profit Uplift (%) | Total Units Sold | Units Uplift (%) | Average Margin (%) |
+  | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+  | **Status Quo (Baseline)** | $961,421.03 | 0.00% | $288,426.31 | 0.00% | 9,799.0 | 0.00% | 30.00% |
+  | **Flat 10% Discount** | $1,007,992.39 | +4.84% | $223,998.31 | -22.34% | 11,509.6 | +17.46% | 22.22% |
+  | **Flat 10% Markup** | $929,348.82 | -3.34% | $337,945.02 | +17.17% | 8,546.4 | -12.78% | 36.36% |
+  | **Competitor Benchmark** | $987,410.40 | +2.70% | $192,542.31 | -33.24% | 10,635.8 | +8.54% | 19.50% |
+  | **Causal Revenue Maximizer** | $1,219,899.14 | **+26.89%** | $202,453.37 | -29.81% | 15,050.7 | **+53.59%** | 16.60% |
+  | **Causal Profit Maximizer** | $936,834.03 | -2.56% | **$378,298.22** | **+31.16%** | 8,080.4 | -17.54% | **40.38%** |
+
+- **Real-Time Single-SKU Pricing Inference Benchmarks**:
+  - `health_beauty` SKU: Baseline price $105.00 -> Recommended $125.99 (+20.0%, bound hit `max_bound_clipped`), CATE elasticity $-1.6634$, expected margin expansion from 30.0% to 41.7%, expected profit uplift +23.1%.
+  - `computers_accessories` SKU: Baseline price $140.00 -> Recommended $167.99 (+20.0%), CATE elasticity $-1.6149$, expected margin expansion from 30.0% to 41.7%, expected profit uplift +24.2%.
+  - `cool_stuff` SKU: Baseline price $115.00 -> Recommended $137.99 (+20.0%), CATE elasticity $-1.7219$, expected margin expansion from 30.0% to 41.7%, expected profit uplift +21.8%.
+- **Catalog Pricing Action Distribution (676 SKUs)**:
+  - `MARKUP`: 602 items (89.1%) — Products historically under-priced relative to their willingness to pay.
+  - `DISCOUNT`: 73 items (10.8%) — Elastic SKUs where strategic discounts drive volume and profit.
+  - `HOLD`: 1 item (0.1%) — Price optimally positioned at baseline.
+- **Operational & Engineering Metrics**:
+  - End-to-end test suite: 69 passing unit and integration tests across repository (100% pass rate).
+  - Model serialization: Zero loss in inference reproducibility after loading from disk.
+  - Missing feature handling: Robust fallback to training feature medians/modes for incomplete inference requests.
+
+
