@@ -221,4 +221,43 @@ This document records causal machine learning experiments, datasets used, baseli
   - Model serialization: Zero loss in inference reproducibility after loading from disk.
   - Missing feature handling: Robust fallback to training feature medians/modes for incomplete inference requests.
 
+---
+
+### Experiment ID: EXP-20261023-07 (High-Performance REST API Microservice / FastAPI & Pydantic V2)
+- **Date**: 2026-10-23
+- **Author**: Rohit / Data Training
+- **Service Architecture & Components**:
+  - Framework: FastAPI 0.161.1, Pydantic 2.14.1, Uvicorn 0.49.0, Starlette / HTTPX.
+  - Core Modules:
+    - [`src/api/main.py`](file:///D:/InfotactSolutionProject/-EconoCausal---Dynamic-pricing-via-Double-Machine-Learning/src/api/main.py): Application factory (`create_app`), lifespan model lifecycle loader, CORS middleware, request timing middleware (`X-Process-Time-Ms`), and centralized error handlers.
+    - [`src/api/schemas.py`](file:///D:/InfotactSolutionProject/-EconoCausal---Dynamic-pricing-via-Double-Machine-Learning/src/api/schemas.py): Pydantic V2 data contracts with field validations (`gt=0`, `le=5`), OpenAPI documentation examples, and dictionary formatters.
+    - [`src/api/service.py`](file:///D:/InfotactSolutionProject/-EconoCausal---Dynamic-pricing-via-Double-Machine-Learning/src/api/service.py): `CausalPricingService` singleton managing model state, inference pipelines, and latency metrics.
+    - [`src/api/routes.py`](file:///D:/InfotactSolutionProject/-EconoCausal---Dynamic-pricing-via-Double-Machine-Learning/src/api/routes.py): RESTful endpoints with tag grouping and Swagger/OpenAPI annotations.
+- **RESTful Endpoints Delivered**:
+  - `GET /`: API welcome banner, version, documentation endpoints (`/docs`, `/redoc`, `/openapi.json`).
+  - `GET /health`: Liveness & readiness probe reporting uptime, model loading status, baseline ATE ($-1.2678$), and refutation score ($100.0\%$).
+  - `GET /model/metadata`: Comprehensive model training metrics, sample counts, encoded features, confidence intervals, and optimizer guardrails.
+  - `POST /predict/price`: Real-time single-SKU dynamic pricing recommendation with Amoroso-Robinson optimization, bounds checks, and uplift projections.
+  - `POST /predict/elasticity`: Heterogeneous CATE elasticity estimator $\hat{\theta}(X_i)$ with elasticity classification (Elastic, Highly Elastic, Inelastic).
+  - `POST /batch/recommend`: High-throughput batch catalog dynamic pricing with portfolio revenue and profit aggregate summaries.
+  - `POST /simulate/portfolio`: Counterfactual scenario matrix comparing 6 strategic pricing policies (Status Quo, -10% Discount, +10% Markup, Competitor Match, Revenue Max, Profit Max).
+- **Latency & Throughput Benchmark Results (`scripts/benchmark_api.py`)**:
+  - **Single-SKU Inference (100 iterations)**:
+    - Core Pipeline Compute Latency: Mean **9.61 ms** (P95: **11.39 ms**).
+    - Client Round-Trip Latency: Median (P50) **16.31 ms**, P90 **18.35 ms**, P95 **31.16 ms**.
+    - Service Throughput: **56.0 requests/sec**.
+  - **Batch Elasticity Estimation (50 items)**:
+    - Total Duration: **18.01 ms** (0.360 ms / item).
+    - Throughput: **2,776.0 items/sec**.
+  - **Batch Catalog Pricing Optimization**:
+    - 10 Items: **26.10 ms** (383.1 items/sec) | Profit Uplift: **+29.3%**.
+    - 50 Items: **31.47 ms** (1,589.0 items/sec) | Profit Uplift: **+31.8%**.
+    - 100 Items: **43.02 ms** (**2,324.6 items/sec**) | Profit Uplift: **+32.4%**.
+  - **Portfolio Scenario Matrix Simulation (50 items)**:
+    - 6 Strategies simulated in **46.87 ms**; confirms `Causal Profit Maximizer` as recommended strategy.
+- **Verification & Test Suite**:
+  - 14 new integration and unit tests implemented in [`tests/test_api.py`](file:///D:/InfotactSolutionProject/-EconoCausal---Dynamic-pricing-via-Double-Machine-Learning/tests/test_api.py).
+  - Full repository test suite: **83 passed out of 83 tests (100% pass rate)** in 39.83s.
+
+
 

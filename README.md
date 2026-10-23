@@ -93,6 +93,53 @@ python -m src.cli predict-item --model models/econocausal_pipeline.joblib --cate
 python -m src.cli simulate --model models/econocausal_pipeline.joblib --data data/raw/retail_price.csv
 ```
 
+---
+
+## 🚀 REST API Microservice (FastAPI / Pydantic)
+
+EconoCausal provides an asynchronous REST API microservice delivering sub-15ms causal dynamic pricing inference, batch catalog optimization, and counterfactual scenario simulations.
+
+### 1. Launch API Microservice
+```bash
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+```
+Interactive Swagger API documentation: `http://localhost:8000/docs`  
+ReDoc alternative documentation: `http://localhost:8000/redoc`
+
+### 2. Available API Endpoints
+| HTTP Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/` | Microservice identification and documentation links |
+| `GET` | `/health` | Health & readiness probe (liveness, uptime, model status, baseline ATE) |
+| `GET` | `/model/metadata` | Detailed training metadata, ATE confidence intervals, refutation score |
+| `POST` | `/predict/price` | Real-time single-SKU dynamic pricing recommendation with profit/revenue optimization |
+| `POST` | `/predict/elasticity` | Heterogeneous causal elasticity estimation $\hat{\theta}(X_i)$ |
+| `POST` | `/batch/recommend` | High-throughput batch catalog dynamic pricing & portfolio aggregates |
+| `POST` | `/simulate/portfolio` | Multi-strategy counterfactual scenario matrix simulation |
+
+### 3. Example Request (Single-SKU Dynamic Pricing)
+```bash
+curl -X POST "http://localhost:8000/predict/price" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "item": {
+      "product_id": "SKU_HEALTH_001",
+      "unit_price": 59.90,
+      "qty": 15.0,
+      "product_category_name": "health_beauty",
+      "comp_price": 58.50
+    },
+    "objective": "profit"
+  }'
+```
+
+### 4. Run API Latency & Throughput Benchmarks
+```bash
+python scripts/benchmark_api.py
+```
+
+---
+
 📌 Conclusion
 
 EconoCausal aims to combine causal inference and machine learning to support more reliable pricing decisions. By estimating the causal impact of price changes rather than relying only on correlations, the project seeks to provide useful insights into demand behavior and help businesses develop more effective pricing strategies.
