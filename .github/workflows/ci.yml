@@ -67,6 +67,10 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
 
+      - name: Build Causal Pricing Model Pipeline
+        run: |
+          python -m src.cli train --data data/raw/retail_price.csv --output models/econocausal_pipeline.joblib
+
       - name: Execute Full Pytest Suite with Coverage
         run: |
           python -m pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=xml

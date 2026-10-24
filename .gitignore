@@ -41,9 +41,11 @@ venv.bak/
 
 
 # Data directories and raw data files
-data/raw/
+data/raw/*
+!data/raw/retail_price.csv
 data/processed/
 *.csv
+!data/raw/retail_price.csv
 *.tsv
 *.parquet
 *.feather
@@ -52,11 +54,13 @@ data/processed/
 *.xls
 
 # Model artifacts and binary checkpoints
+models/*
+!models/econocausal_pipeline.joblib
 models/*.pkl
-models/*.joblib
 models/*.onnx
 *.pkl
 *.joblib
+!models/econocausal_pipeline.joblib
 
 # Logs and experiment outputs
 *.log
