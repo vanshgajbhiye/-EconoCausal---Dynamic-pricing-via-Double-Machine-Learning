@@ -1,0 +1,3 @@
+export default function MetricCard({ icon: Icon, label, value, trend, note, accent="violet" }) {
+  return <article className="metric-card"><div className={`metric-icon ${accent}`}><Icon size={18}/></div><div className="metric-label">{label}</div><div className="metric-value">{value}</div><div className="metric-meta"><span className={trend?.startsWith("-")?"trend down":"trend"}>{trend}</span><span>{note}</span></div></article>;
+}
