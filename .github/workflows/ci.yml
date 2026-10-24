@@ -69,7 +69,7 @@ jobs:
 
       - name: Build Causal Pricing Model Pipeline
         run: |
-          python -m src.cli train --data data/raw/retail_price.csv --output models/econocausal_pipeline.joblib
+          python -m src.cli train --data data/raw/retail_price.csv --save-model models/econocausal_pipeline.joblib
 
       - name: Execute Full Pytest Suite with Coverage
         run: |
