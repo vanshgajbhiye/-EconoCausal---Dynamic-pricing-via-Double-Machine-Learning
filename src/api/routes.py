@@ -5,8 +5,9 @@ counterfactual simulation, elasticity calculation, and health checks.
 """
 
 from typing import Any, Dict
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
+from src.api.metrics import export_metrics, record_recommendation
 from src.api.schemas import (
     BatchPricingRequest,
     BatchPricingResponse,
@@ -65,6 +66,17 @@ async def health_check(
 
 
 @router.get(
+    "/metrics",
+    tags=["Observability"],
+    summary="Prometheus Telemetry Metrics Exporter",
+    description="Exports microservice runtime metrics, request latencies, and pricing telemetry for Prometheus scraping.",
+)
+async def metrics_endpoint() -> Response:
+    """Expose Prometheus metrics in exposition format."""
+    return export_metrics()
+
+
+@router.get(
     "/model/metadata",
     response_model=ModelMetadataResponse,
     responses={503: {"model": ErrorDetail, "description": "Model not loaded"}},
@@ -105,7 +117,15 @@ async def predict_single_sku_price(
 ) -> SingleItemPricingResponse:
     """Predict optimal price and projected uplift for a single item."""
     try:
-        return service.predict_single_item(request)
+        response = service.predict_single_item(request)
+        category = getattr(request.item, "product_category_name", None) or "general"
+        record_recommendation(
+            product_category=category,
+            action=response.action,
+            elasticity=response.causal_elasticity,
+            profit_uplift_pct=response.profit_uplift_pct,
+        )
+        return response
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -135,7 +155,15 @@ async def predict_elasticity(
 ) -> ElasticityResponse:
     """Predict causal elasticity coefficients for one or more items."""
     try:
-        return service.predict_elasticity(request)
+        response = service.predict_elasticity(request)
+        for i, pred in enumerate(response.predictions):
+            cat = getattr(request.items[i], "product_category_name", None) or "general"
+            record_recommendation(
+                product_category=cat,
+                action="HOLD",
+                elasticity=pred.predicted_elasticity,
+            )
+        return response
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -165,7 +193,16 @@ async def batch_recommend_prices(
 ) -> BatchPricingResponse:
     """Generate dynamic price recommendations and portfolio uplifts across a catalog batch."""
     try:
-        return service.batch_recommend(request)
+        response = service.batch_recommend(request)
+        for i, rec in enumerate(response.recommendations):
+            cat = getattr(request.items[i], "product_category_name", None) or "general"
+            record_recommendation(
+                product_category=cat,
+                action=rec.action,
+                elasticity=rec.causal_elasticity,
+                profit_uplift_pct=rec.profit_uplift_pct,
+            )
+        return response
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

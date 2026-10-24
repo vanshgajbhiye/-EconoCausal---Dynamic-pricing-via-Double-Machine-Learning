@@ -138,6 +138,56 @@ curl -X POST "http://localhost:8000/predict/price" \
 python scripts/benchmark_api.py
 ```
 
+
+---
+
+## 🐳 Production Docker & Cloud Deployment (Day 8)
+
+### 1. Build & Run via Docker
+```bash
+# Build multi-stage hardened production image
+docker build -t econocausal-pricing-api:1.0.0 .
+
+# Run standalone container with healthcheck
+docker run -d -p 8000:8000 --name econocausal-api econocausal-pricing-api:1.0.0
+
+# Verify container health
+curl http://localhost:8000/health
+```
+
+### 2. Full Stack Orchestration (FastAPI + Prometheus + Grafana)
+```bash
+# Start microservice, Prometheus scraper, and Grafana dashboard
+docker-compose up -d
+
+# Service Endpoints:
+# - REST API Microservice:  http://localhost:8000/docs
+# - Prometheus Metrics:     http://localhost:8000/metrics
+# - Prometheus Web UI:      http://localhost:9090
+# - Grafana Dashboards:     http://localhost:3000 (admin / econocausal)
+```
+
+### 3. Deploy to Kubernetes
+```bash
+# Apply production cloud manifests
+kubectl apply -f deploy/k8s/namespace.yaml
+kubectl apply -f deploy/k8s/configmap.yaml
+kubectl apply -f deploy/k8s/deployment.yaml
+kubectl apply -f deploy/k8s/service.yaml
+kubectl apply -f deploy/k8s/hpa.yaml
+kubectl apply -f deploy/k8s/ingress.yaml
+
+# Check rollout status
+kubectl get pods -n econocausal-prod
+kubectl get hpa -n econocausal-prod
+```
+
+### 4. Continuous Integration & Delivery (CI/CD)
+The repository includes automated GitHub Actions (`.github/workflows/ci.yml`) providing:
+- Automated code linting & static analysis (`flake8`, `black`)
+- Python 3.10 and 3.11 test matrix execution (`pytest tests/`)
+- Multi-stage Docker container build with layer caching and smoke tests
+
 ---
 
 📌 Conclusion

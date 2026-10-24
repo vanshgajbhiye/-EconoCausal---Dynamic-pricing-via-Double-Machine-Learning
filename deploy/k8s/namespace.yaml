@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: econocausal-prod
+  labels:
+    app.kubernetes.io/name: econocausal
+    app.kubernetes.io/part-of: dynamic-pricing-system
+    environment: production

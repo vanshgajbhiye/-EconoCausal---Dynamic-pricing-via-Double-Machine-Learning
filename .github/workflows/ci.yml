@@ -1,0 +1,112 @@
+name: EconoCausal CI/CD Workflow
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  # 1. Code Quality, Linting and Static Analysis
+  # ===========================================================================
+  lint-and-validate:
+    name: Code Hygiene & Schema Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+
+      - name: Install Linting Tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort
+
+      - name: Validate Formatting and Syntax
+        run: |
+          black --check --diff src/ tests/ scripts/ || echo "Formatting suggestions detected"
+          flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+
+  # ===========================================================================
+  # 2. Automated Test Matrix & Causal Verification Suite
+  # ===========================================================================
+  test-and-verify:
+    name: Test Suite (Python ${{ matrix.python-version }})
+    needs: lint-and-validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+
+      - name: Execute Full Pytest Suite with Coverage
+        run: |
+          python -m pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=xml
+
+      - name: Upload Test Coverage Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-py${{ matrix.python-version }}
+          path: coverage.xml
+          retention-days: 7
+
+  # ===========================================================================
+  # 3. Multi-Stage Docker Container Build & Smoke Test
+  # ===========================================================================
+  docker-build-and-smoke-test:
+    name: Docker Build & Container Smoke Test
+    needs: test-and-verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Production Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          tags: econocausal-pricing-api:latest
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run Containerized Smoke Test
+        run: |
+          docker run -d --name test-api -p 8000:8000 econocausal-pricing-api:latest
+          sleep 5
+          docker ps
+          curl --fail --retry 5 --retry-delay 2 http://localhost:8000/health || (docker logs test-api && exit 1)
+          curl --fail http://localhost:8000/metrics | grep "econocausal_http_requests_total" || (docker logs test-api && exit 1)
+          docker stop test-api

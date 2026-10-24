@@ -259,5 +259,47 @@ This document records causal machine learning experiments, datasets used, baseli
   - 14 new integration and unit tests implemented in [`tests/test_api.py`](file:///D:/InfotactSolutionProject/-EconoCausal---Dynamic-pricing-via-Double-Machine-Learning/tests/test_api.py).
   - Full repository test suite: **83 passed out of 83 tests (100% pass rate)** in 39.83s.
 
+---
+
+### Experiment ID: EXP-20261024-08 (Production Docker Containerization, Prometheus Observability & Cloud Deployment Architecture)
+- **Date**: 2026-10-24
+- **Author**: Rohit / Data Training
+- **Deployment Scope**:
+  - Multi-stage containerization, real-time observability telemetry, microservice health probes, and cloud-native orchestration for enterprise serving.
+- **Architectural Deliverables**:
+  1. **Hardened Multi-Stage Dockerfile** (`Dockerfile`, `.dockerignore`):
+     - Stage 1 (`builder`): Compiles dependencies into binary wheels using `python:3.11-slim`, isolating build toolchains from the final image.
+     - Stage 2 (`runner`): Ultra-slim Python 3.11 runtime configured with non-root user `appuser:appgroup` (UID/GID 10001) for strict CIS container security benchmark compliance.
+     - Native Docker healthcheck querying `/health` probe every 30 seconds with 5-second timeout and 15-second start grace period.
+     - Optimized `.dockerignore` preventing build context pollution from Git, caches, and test artifacts.
+  2. **Prometheus Telemetry & Instrumentation** (`src/api/metrics.py`, `src/api/routes.py`, `src/api/main.py`):
+     - `GET /metrics`: Standard Prometheus exposition text format endpoint for metrics scrapers.
+     - Metrics instrumented:
+       - `econocausal_http_requests_total`: Throughput counter labeled by HTTP method, route, and status code.
+       - `econocausal_http_request_duration_seconds`: High-resolution latency histogram (5ms to 5,000ms buckets).
+       - `econocausal_http_requests_active`: In-flight concurrency gauge tracking worker saturation.
+       - `econocausal_pricing_recommendations_total`: Telemetry counter tracking pricing actions (`MARKUP`, `DISCOUNT`, `HOLD`) partitioned by product category.
+       - `econocausal_cate_elasticity_latest`: Real-time gauge of estimated CATE price elasticity per category.
+       - `econocausal_profit_uplift_percent_latest`: Real-time gauge of expected profit uplift per category.
+       - `econocausal_model_info`: Model build metadata info gauge (version, baseline ATE, refutation score).
+  3. **Multi-Container Local Orchestration** (`docker-compose.yml`, `deploy/prometheus/prometheus.yml`):
+     - Services: `econocausal-api` (FastAPI microservice), `prometheus` (v2.47.0 time-series scraper), and `grafana` (v10.1.0 operations dashboard).
+     - Automated bridge networking, service discovery, and persistent volume storage.
+  4. **Production Kubernetes Cloud Manifests** (`deploy/k8s/`):
+     - `namespace.yaml`: Dedicated `econocausal-prod` namespace.
+     - `configmap.yaml`: Centralized configuration for ports, log level, and economic guardrails.
+     - `deployment.yaml`: 3-pod replica set with zero-downtime `RollingUpdate` strategy, CPU/memory requests/limits, non-root security context, and native `livenessProbe` / `readinessProbe`.
+     - `service.yaml`: Internal `ClusterIP` on port 80 and external `LoadBalancer` on port 8000.
+     - `hpa.yaml`: Horizontal Pod Autoscaler dynamically scaling between 2 and 10 pods based on 70% CPU and 80% memory targets.
+     - `ingress.yaml`: NGINX ingress controller configuration with SSL termination and payload routing.
+  5. **Enterprise CI/CD Workflow** (`.github/workflows/ci.yml`):
+     - Triggered automatically on pushes and pull requests to `main` and `feature/**`.
+     - Multi-stage pipeline: (1) Linting & code hygiene (`flake8`, `black`), (2) Python 3.10 and 3.11 test matrix with test coverage XML artifact export, (3) Docker image build caching with GitHub Actions cache (`type=gha`) and container smoke test.
+- **Verification & Test Suite**:
+  - 11 new integration and unit tests implemented in [`tests/test_observability.py`](file:///D:/InfotactSolutionProject/-EconoCausal---Dynamic-pricing-via-Double-Machine-Learning/tests/test_observability.py).
+  - Validated `/metrics` status and content type, request counting, pricing telemetry, Dockerfile structure, `docker-compose.yml` validity, Kubernetes manifests syntax, and GitHub Actions workflow.
+  - Full repository test suite: **94 passed out of 94 tests (100% pass rate)** in 70.80s.
+
+
 
 

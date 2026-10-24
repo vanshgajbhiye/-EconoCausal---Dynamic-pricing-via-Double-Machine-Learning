@@ -20,6 +20,7 @@ fastapi>=0.100.0
 uvicorn>=0.23.0
 pydantic>=2.0.0
 httpx>=0.24.0
+prometheus-client>=0.19.0
 
 # Testing and Code Quality
 pytest>=7.4.0
