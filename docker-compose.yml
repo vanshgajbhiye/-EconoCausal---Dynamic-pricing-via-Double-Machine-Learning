@@ -79,6 +79,27 @@ services:
     networks:
       - econocausal-network
 
+  # ===========================================================================
+  # Streamlit Dynamic Pricing & What-If Visualizer Dashboard (Day 9)
+  # ===========================================================================
+  econocausal-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: econocausal-pricing-api:1.0.0
+    container_name: econocausal-dashboard
+    restart: unless-stopped
+    command: ["python", "-m", "streamlit", "run", "src/dashboard/app.py", "--server.port", "8501", "--server.address", "0.0.0.0", "--server.headless", "true"]
+    ports:
+      - "8501:8501"
+    environment:
+      - ECONOCAUSAL_MODEL_PATH=/app/models/econocausal_pipeline.joblib
+    depends_on:
+      econocausal-api:
+        condition: service_healthy
+    networks:
+      - econocausal-network
+
 networks:
   econocausal-network:
     driver: bridge

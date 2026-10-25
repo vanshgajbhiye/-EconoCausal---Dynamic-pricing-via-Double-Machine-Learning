@@ -300,6 +300,39 @@ This document records causal machine learning experiments, datasets used, baseli
   - Validated `/metrics` status and content type, request counting, pricing telemetry, Dockerfile structure, `docker-compose.yml` validity, Kubernetes manifests syntax, and GitHub Actions workflow.
   - Full repository test suite: **94 passed out of 94 tests (100% pass rate)** in 70.80s.
 
+---
+
+### Experiment ID: EXP-20261025-09 (Interactive Streamlit Dynamic Pricing Dashboard & Counterfactual What-If Visualizer)
+- **Date**: 2026-10-25
+- **Author**: Rohit / Data Training
+- **Deliverable Scope**:
+  - Executive KPI cockpit, SKU price elasticity curve visualizer, real-time what-if scenario simulator, game-theoretic competitor retaliation simulator, catalog batch recommender, and refutation governance audit suite.
+- **Architectural & Component Deliverables**:
+  1. **Core Interactive Application** ([`src/dashboard/app.py`](file:///D:/EconoCausalProject2026/src/dashboard/app.py)):
+     - Built with Streamlit 1.66+ and Plotly 7.1+, configured with wide layout, caching decorators (`@st.cache_resource`, `@st.cache_data`), responsive metric cards, and custom CSS styling.
+     - Sidebar controls: Dynamic pipeline model loader (`models/econocausal_pipeline.joblib`), CSV catalog uploader, pricing objective radio (Profit vs Revenue), and microeconomic guardrails (min margin floor 0-25%, max discount -5% to -50%, max markup +5% to +50%, psychological .99 charm pricing toggle).
+  2. **Mathematical & Visualization Engine** ([`src/dashboard/components.py`](file:///D:/EconoCausalProject2026/src/dashboard/components.py)):
+     - `compute_pricing_curves`: Generates fine price grids evaluating constant elasticity demand $Q(P) = Q_0 (P/P_0)^\theta$, total revenue $R(P)$, gross profit $\Pi(P)$, and gross margin $(P-c)/P$.
+     - `simulate_competitor_response`: Implements game-theoretic competitor reaction models incorporating cross-price elasticity:
+       $$Q_{adj} = Q_0 \cdot \left(\frac{P_{our}}{P_{our,0}}\right)^{\theta_{own}} \cdot \left(\frac{P_{comp}}{P_{comp,0}}\right)^{\theta_{cross}}$$
+       Evaluates 6 retaliation modes: Static, Price Matching, Moderate Undercut (-5%), Aggressive Undercut (-10%), Cooperative Parallel Shift, and Custom Competitor Price. Computes adjusted demand, revenue, profit, and provides automated risk assessments (Low, Moderate, High Risk).
+     - `calculate_catalog_kpis`: Computes aggregated catalog metrics, margin expansion in basis points (bps), action distribution counts, and elasticity percentiles.
+     - Plotly visualizers: Dual-axis demand/profit curve chart with vertical reference lines for baseline price, Amoroso-Robinson optimal price, competitor price, cost floor, and shaded guardrail regions; multi-strategy scenario comparison waterfall chart; horizontal category elasticity ranking chart.
+  3. **Launcher & Orchestration Integration** ([`scripts/run_dashboard.py`](file:///D:/EconoCausalProject2026/scripts/run_dashboard.py), [`docker-compose.yml`](file:///D:/EconoCausalProject2026/docker-compose.yml)):
+     - Command-line launcher supporting custom port, host, headless execution, and automatic model verification.
+     - Multi-container orchestration: Added `econocausal-dashboard` container on port 8501 to `docker-compose.yml` alongside the FastAPI microservice, Prometheus scraper, and Grafana dashboard.
+- **Verification & Test Suite** ([`tests/test_dashboard.py`](file:///D:/EconoCausalProject2026/tests/test_dashboard.py)):
+  - 8 new unit and integration tests added:
+    - Curve generation monotonic demand decay and negative profit verification below cost floor.
+    - Non-positive input validation error handling.
+    - All 6 competitor response modes and cross-elasticity demand damping verification.
+    - Catalog KPI calculations, margin expansion bps, and action count assertions.
+    - Plotly figure structure, multi-axis, and trace count validations.
+    - Dashboard app and launcher script syntax tree validations.
+    - Docker compose dashboard service definition verification.
+  - Full repository test suite: **102 passed out of 102 tests (100% pass rate)**.
+
+
 
 
 

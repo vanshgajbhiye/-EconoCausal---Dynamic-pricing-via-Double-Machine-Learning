@@ -190,6 +190,30 @@ The repository includes automated GitHub Actions (`.github/workflows/ci.yml`) pr
 
 ---
 
+## 📈 Interactive Streamlit Pricing Dashboard & Visualizer (Day 9)
+
+EconoCausal includes an executive-grade interactive Streamlit web application delivering real-time pricing intelligence, elasticity curve plotting, and strategic counterfactual sandboxing.
+
+### 1. Launch the Dashboard
+```bash
+# Option A: Python launcher script
+python scripts/run_dashboard.py --port 8501
+
+# Option B: Streamlit CLI directly
+streamlit run src/dashboard/app.py
+```
+Open your browser at `http://localhost:8501`.
+
+### 2. Dashboard Capabilities & Tabs
+1. **📊 Executive KPI Cockpit**: High-level portfolio impact metrics (Gross profit +31.2%, revenue +2.7%, gross margin expansion +1,038 bps), multi-strategy counterfactual waterfall comparison, and category profitability breakdown.
+2. **📈 SKU Elasticity & Microeconomic Curves**: Real-time dual-axis Plotly visualization plotting Demand Volume Q(P), Gross Profit Π(P), and Revenue R(P) across prices. Features vertical reference lines for current baseline price, Amoroso-Robinson optimal price (P*), competitor price (P_comp), cost floors, and shaded permissible guardrail bands.
+3. **🎛️ Counterfactual What-If Sandbox**: Live scenario simulator with sliders for price changes (-50% to +60%), COGS inflation shocks (-30% to +50%), demand volumes, and elasticity overrides.
+4. **⚔️ Competitor Response Simulator**: Game-theoretic retaliation analyzer modeling competitor reactions (Price Matching, Undercutting by 5% or 10%, Cooperative Shifts) with cross-price elasticity adjustments and strategic risk ratings.
+5. **📋 Catalog Batch Optimizer & CSV Exporter**: Interactive catalog table with search, category filtering, action badges (MARKUP, DISCOUNT, HOLD), and one-click timestamped CSV export.
+6. **🛡️ Causal Governance & Refutation Audit**: Live verification metrics for Neyman orthogonality, Placebo Treatment permutations, Random Common Cause confounder injections, and Data Subsampling stability.
+
+---
+
 📌 Conclusion
 
 EconoCausal aims to combine causal inference and machine learning to support more reliable pricing decisions. By estimating the causal impact of price changes rather than relying only on correlations, the project seeks to provide useful insights into demand behavior and help businesses develop more effective pricing strategies.
