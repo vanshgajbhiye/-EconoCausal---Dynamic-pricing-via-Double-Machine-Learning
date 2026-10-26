@@ -13,6 +13,7 @@ import datetime
 import os
 import sys
 from typing import Optional
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -25,12 +26,16 @@ if PROJECT_ROOT not in sys.path:
 from src.data.load_data import load_retail_price_dataset
 from src.dashboard.components import (
     build_category_elasticity_chart,
+    build_confounder_psi_chart,
+    build_distribution_comparison_chart,
+    build_elasticity_shift_chart,
     build_price_elasticity_curve_chart,
     build_scenario_waterfall_chart,
     calculate_catalog_kpis,
     compute_pricing_curves,
     simulate_competitor_response,
 )
+from src.monitoring.drift import CausalDriftDetector
 from src.pipeline import EconoCausalPipeline
 
 DEFAULT_MODEL_PATH = os.path.join(PROJECT_ROOT, "models", "econocausal_pipeline.joblib")
@@ -253,7 +258,7 @@ with st.spinner("Calculating optimal prices and causal counterfactual uplifts...
 
 
 # --- Tabs Navigation ---
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
     [
         "📊 Executive KPI Cockpit",
         "📈 SKU Elasticity & Curves",
@@ -261,6 +266,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
         "⚔️ Competitor Response Simulator",
         "📋 Catalog Batch Optimizer",
         "🛡️ Causal Governance & Audit",
+        "🔍 Causal MLOps & Drift Monitor",
     ]
 )
 
@@ -908,3 +914,225 @@ with tab6:
                 "Serving Status": "Operational",
             }
         )
+
+
+# ==============================================================================
+# TAB 7: CAUSAL MLOPS & CONFOUNDER DRIFT MONITOR
+# ==============================================================================
+with tab7:
+    st.subheader("🔍 Continuous Causal MLOps & Confounder Drift Monitor")
+    st.caption(
+        "Audits covariate shift via Population Stability Index (PSI), Kolmogorov-Smirnov tests, "
+        "and tracks heterogeneous CATE elasticity distribution drift with automated retraining triggers."
+    )
+
+    drift_scenario = st.selectbox(
+        "Select Production Evaluation Stream or Adverse Market Shock",
+        options=[
+            "Production Holdout Stream (Unseen Test Data)",
+            "Simulate Competitor Price War (-20% Competitor Prices)",
+            "Simulate Freight & Logistics Cost Inflation (+35% Freight Charges)",
+            "Simulate Macroeconomic Demand Contraction (-30% Sales Volumes)",
+            "Simulate Extreme Joint Covariate Shift (Price War + Inflation)",
+        ],
+        index=0,
+        help="Evaluates live drift detectors against real holdout traffic or synthetic market shocks.",
+    )
+
+    # Construct target distribution based on chosen scenario
+    target_eval_df = catalog_df.copy()
+    if drift_scenario == "Production Holdout Stream (Unseen Test Data)":
+        target_eval_df = catalog_df.sample(frac=0.40, random_state=99)
+    elif drift_scenario == "Simulate Competitor Price War (-20% Competitor Prices)":
+        target_eval_df["comp_1"] = target_eval_df["comp_1"] * 0.80
+        target_eval_df["comp_2"] = target_eval_df["comp_2"] * 0.80
+        target_eval_df["comp_3"] = target_eval_df["comp_3"] * 0.80
+    elif drift_scenario == "Simulate Freight & Logistics Cost Inflation (+35% Freight Charges)":
+        target_eval_df["freight_price"] = target_eval_df["freight_price"] * 1.35
+        target_eval_df["fp1"] = target_eval_df["fp1"] * 1.35
+        target_eval_df["fp2"] = target_eval_df["fp2"] * 1.35
+        target_eval_df["fp3"] = target_eval_df["fp3"] * 1.35
+    elif drift_scenario == "Simulate Macroeconomic Demand Contraction (-30% Sales Volumes)":
+        target_eval_df["qty"] = np.maximum(1.0, target_eval_df["qty"] * 0.70)
+    elif drift_scenario == "Simulate Extreme Joint Covariate Shift (Price War + Inflation)":
+        target_eval_df["comp_1"] = target_eval_df["comp_1"] * 0.75
+        target_eval_df["comp_2"] = target_eval_df["comp_2"] * 0.75
+        target_eval_df["comp_3"] = target_eval_df["comp_3"] * 0.75
+        target_eval_df["freight_price"] = target_eval_df["freight_price"] * 1.40
+        target_eval_df["fp1"] = target_eval_df["fp1"] * 1.40
+
+    # Execute drift analysis
+    drift_detector = CausalDriftDetector(
+        psi_warning_threshold=0.10,
+        psi_alert_threshold=0.25,
+    )
+    drift_report = drift_detector.generate_report(
+        baseline_df=catalog_df,
+        target_df=target_eval_df,
+        pipeline=pipeline,
+        run_refutations=False,
+    )
+
+    # Health Status Callout Banner
+    status_color_map = {
+        "HEALTHY": ("#d4edda", "#155724", "HEALTHY ✅"),
+        "WARNING": ("#fff3cd", "#856404", "WARNING ⚠️"),
+        "RETRAIN_RECOMMENDED": ("#f8d7da", "#721c24", "RETRAIN RECOMMENDED 🚨"),
+        "CRITICAL": ("#f5c6cb", "#721c24", "CRITICAL REFUTATION FAILURE 🛑"),
+    }
+    bg_col, text_col, badge_text = status_color_map.get(
+        drift_report.overall_status,
+        ("#f8f9fa", "#1d3557", drift_report.overall_status),
+    )
+
+    st.markdown(
+        f"""
+        <div style="background-color: {bg_col}; color: {text_col}; padding: 16px; border-radius: 8px; margin-bottom: 20px; border-left: 6px solid {text_col};">
+            <h4 style="margin: 0; padding-bottom: 6px;">Causal MLOps Status: {badge_text}</h4>
+            <p style="margin: 0; font-size: 15px;"><b>Recommendation:</b> {drift_report.recommendation}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Summary KPI Cards
+    m1, m2, m3, m4, m5 = st.columns(5)
+    with m1:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <b>Max Confounder PSI</b>
+                <div class="metric-value">{drift_report.max_confounder_psi:.4f}</div>
+                <div class="metric-delta {'delta-neg' if drift_report.max_confounder_psi >= 0.25 else 'delta-pos'}">
+                    {'Alert (>= 0.25)' if drift_report.max_confounder_psi >= 0.25 else ('Warning' if drift_report.max_confounder_psi >= 0.10 else 'Stable (< 0.10)')}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with m2:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <b>Mean Confounder PSI</b>
+                <div class="metric-value">{drift_report.mean_confounder_psi:.4f}</div>
+                <div class="metric-delta delta-pos">Catalog Avg</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with m3:
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <b>Drifting Confounders</b>
+                <div class="metric-value">{drift_report.num_drifting_confounders} / {len(drift_report.confounder_drift)}</div>
+                <div class="metric-delta {'delta-neg' if drift_report.num_drifting_confounders > 0 else 'delta-pos'}">
+                    {drift_report.num_drifting_confounders} Covariates Shifted
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with m4:
+        cate_psi = drift_report.elasticity_drift.get("psi", 0.0) if drift_report.elasticity_drift else 0.0
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <b>CATE Elasticity PSI</b>
+                <div class="metric-value">{cate_psi:.4f}</div>
+                <div class="metric-delta {'delta-neg' if cate_psi >= 0.25 else 'delta-pos'}">
+                    {drift_report.elasticity_drift.get('drift_level', 'STABLE') if drift_report.elasticity_drift else 'N/A'}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with m5:
+        delta_theta = drift_report.elasticity_drift.get("delta_mean", 0.0) if drift_report.elasticity_drift else 0.0
+        st.markdown(
+            f"""
+            <div class="metric-card">
+                <b>Mean Elasticity Shift</b>
+                <div class="metric-value">{delta_theta:+.3f}</div>
+                <div class="metric-delta {'delta-neg' if abs(delta_theta) > 0.2 else 'delta-pos'}">
+                    Δθ vs Baseline
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Plotly Charts Row: Confounder PSI + Elasticity Shift
+    chart_col1, chart_col2 = st.columns(2)
+    with chart_col1:
+        psi_fig = build_confounder_psi_chart(drift_report.confounder_drift)
+        st.plotly_chart(psi_fig, use_container_width=True)
+
+    with chart_col2:
+        if drift_report.elasticity_drift and pipeline is not None:
+            base_thetas = pipeline.predict_elasticity(catalog_df)
+            target_thetas = pipeline.predict_elasticity(target_eval_df)
+            elast_fig = build_elasticity_shift_chart(base_thetas, target_thetas)
+            st.plotly_chart(elast_fig, use_container_width=True)
+        else:
+            st.info("Elasticity drift chart requires fitted pipeline.")
+
+    # Interactive Covariate Distribution Comparison
+    st.markdown("### 📊 Confounder Distribution Inspector")
+    st.caption("Visually inspect changes between training baseline and production evaluation distributions.")
+
+    inspect_feat = st.selectbox(
+        "Choose Confounder to Inspect",
+        options=list(drift_report.confounder_drift.keys()),
+        index=0,
+    )
+
+    if inspect_feat in catalog_df.columns and inspect_feat in target_eval_df.columns:
+        dist_fig = build_distribution_comparison_chart(
+            baseline_series=catalog_df[inspect_feat],
+            target_series=target_eval_df[inspect_feat],
+            feature_name=inspect_feat,
+        )
+        st.plotly_chart(dist_fig, use_container_width=True)
+
+    # Confounder Audit Table
+    st.markdown("### 📋 Confounder Drift Diagnostics Table")
+    drift_table_rows = []
+    for f_name, f_res in drift_report.confounder_drift.items():
+        drift_table_rows.append(
+            {
+                "Confounder": f_name,
+                "PSI": f_res.psi,
+                "Status": f_res.drift_level,
+                "KS Statistic": f"{f_res.ks_stat:.4f}" if f_res.ks_stat is not None else "N/A",
+                "p-value": f"{f_res.p_value:.4f}" if f_res.p_value is not None else "N/A",
+                "Baseline Mean": f_res.baseline_mean if f_res.baseline_mean is not None else "N/A",
+                "Target Mean": f_res.target_mean if f_res.target_mean is not None else "N/A",
+                "Mean Shift (%)": f"{f_res.mean_shift_pct:+.2f}%" if f_res.mean_shift_pct is not None else "N/A",
+            }
+        )
+    drift_summary_df = pd.DataFrame(drift_table_rows).sort_values(by="PSI", ascending=False)
+    st.dataframe(drift_summary_df, use_container_width=True, hide_index=True)
+
+    # Automated Retraining Action Simulator
+    st.markdown("### 🔄 Automated Retraining Trigger Simulation")
+    trigger_col1, trigger_col2 = st.columns([2, 1])
+    with trigger_col1:
+        st.markdown(
+            """
+            In an automated CI/CD pipeline or Airflow/Kubeflow DAG, when the status evaluates to
+            `RETRAIN_RECOMMENDED` or `CRITICAL`, a webhook initiates automated retraining of
+            `EconoCausalPipeline`, triggers a new refutation suite audit, and creates a candidate model version.
+            """
+        )
+    with trigger_col2:
+        if st.button("🚀 Trigger Model Retraining Webhook (Simulation)", use_container_width=True):
+            st.success("Retraining trigger dispatched! Pipeline retraining queued with updated confounder data.")
+

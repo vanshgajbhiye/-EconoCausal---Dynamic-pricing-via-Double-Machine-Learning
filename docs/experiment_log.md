@@ -332,6 +332,61 @@ This document records causal machine learning experiments, datasets used, baseli
     - Docker compose dashboard service definition verification.
   - Full repository test suite: **102 passed out of 102 tests (100% pass rate)**.
 
+---
+
+### Experiment ID: EXP-20261026-10 (Continuous Causal MLOps, Confounder Drift Detection & Automated Refutation Re-Audit)
+- **Date**: 2026-10-26
+- **Author**: Rohit / Data Training & Causal MLOps
+- **Deliverable Scope**:
+  - Continuous production drift monitoring for high-dimensional confounders $X$, treatment price $T$, demand volume $Y$, and heterogeneous CATE elasticity distribution $\hat{\theta}(X)$. Automated causal refutation re-auditing on incoming batches, multi-tier retraining decision engine, REST API microservice endpoints, Prometheus drift gauges, CLI audit tooling, and Streamlit Tab 7 interactive inspector.
+- **Architectural & Component Deliverables**:
+  1. **Causal Drift Detection Engine** ([`src/monitoring/drift.py`](file:///D:/EconoCausalProject2026/src/monitoring/drift.py)):
+     - Population Stability Index (PSI) formulation across 10 quantile bins:
+       $$PSI = \sum_{b=1}^B \left( P_{target,b} - P_{baseline,b} \right) \cdot \ln\left(\frac{P_{target,b}}{P_{baseline,b}}\right)$$
+     - Two-sample Kolmogorov-Smirnov test (`scipy.stats.ks_2samp`) and Wasserstein distance (Earth Mover's Distance) for continuous variables.
+     - Categorical frequency distribution drift tracking with unseen category smoothing ($\epsilon = 10^{-4}$).
+     - Treatment ($P$) and Outcome ($Q$) drift tracking.
+     - Heterogeneous CATE elasticity shift tracking $\hat{\theta}(X)$ and microeconomic regime flip detection ($\theta < -1$ vs $\theta \ge -1$).
+     - Automated production refutation re-audits using `CausalRefuter` (Placebo Treatment, Random Common Cause, Data Subsetting).
+     - Multi-criteria automated retraining trigger decision engine:
+       - `HEALTHY`: Confounder distributions and causal identification stable ($PSI < 0.10$, 100% refutations passed).
+       - `WARNING`: Moderate drift observed ($0.10 \le PSI < 0.25$ or category regime flips); monitor closely.
+       - `RETRAIN_RECOMMENDED`: Significant drift detected ($PSI \ge 0.25$ or multiple shifting covariates); trigger DML pipeline retraining.
+       - `CRITICAL`: Refutation test failed on production data ($< 67\%$ pass rate); pause automated pricing, revert to safety guardrails.
+  2. **FastAPI Microservice Integration** ([`src/api/routes.py`](file:///D:/EconoCausalProject2026/src/api/routes.py), [`src/api/schemas.py`](file:///D:/EconoCausalProject2026/src/api/schemas.py), [`src/api/service.py`](file:///D:/EconoCausalProject2026/src/api/service.py)):
+     - `POST /monitoring/drift`: Accepts production batch payload and returns full `DriftAuditResponse` with per-feature PSI, KS stats, p-values, Wasserstein distance, CATE shift, and retraining recommendations.
+     - Prometheus telemetry instrumentation ([`src/api/metrics.py`](file:///D:/EconoCausalProject2026/src/api/metrics.py)): `econocausal_confounder_max_psi`, `econocausal_confounder_mean_psi`, `econocausal_drift_health_status`, `econocausal_refutation_prod_pass_rate`.
+  3. **Unified CLI Subcommand** ([`src/cli.py`](file:///D:/EconoCausalProject2026/src/cli.py)):
+     - `audit-drift`: Evaluates drift between baseline and target CSV files, outputs formatted terminal audit summary table, and exports structured JSON reports.
+  4. **Streamlit Executive Cockpit Tab 7** ([`src/dashboard/app.py`](file:///D:/EconoCausalProject2026/src/dashboard/app.py), [`src/dashboard/components.py`](file:///D:/EconoCausalProject2026/src/dashboard/components.py)):
+     - Interactive scenario selector: Real holdout stream vs synthetic market shocks (Competitor Price War -20%, Freight Inflation +35%, Demand Contraction -30%, Extreme Joint Shock).
+     - Color-coded status callout banners (`HEALTHY`, `WARNING`, `RETRAIN_RECOMMENDED`, `CRITICAL`).
+     - 5 metric cards: Max PSI, Mean PSI, Drifting Confounders count, CATE Elasticity PSI, Mean Elasticity Shift ($\Delta \bar{\theta}$).
+     - Plotly horizontal bar chart of confounder PSI with reference lines at $0.10$ and $0.25$.
+     - Interactive confounder distribution comparison histogram / KDE inspector.
+     - Complete sortable diagnostics table.
+     - Retraining webhook simulation button.
+  5. **Final Capstone Handover Documentation & Runbook** ([`docs/capstone_handover.md`](file:///D:/EconoCausalProject2026/docs/capstone_handover.md)):
+     - Comprehensive capstone handover, architecture blueprint, mathematical proofs, empirical scenario results (+31.16% profit uplift, +1,038 bps gross margin expansion), and production operations runbook.
+- **Verification & Test Suite** ([`tests/test_monitoring.py`](file:///D:/EconoCausalProject2026/tests/test_monitoring.py)):
+  - 15 new unit and integration tests added:
+    - Identical distributions yield $PSI = 0.0$.
+    - Monotonic PSI scaling under progressive distribution shift.
+    - Categorical frequency PSI with unseen category handling.
+    - Robustness to empty arrays, constant values, and NaNs.
+    - Two-sample KS test and Wasserstein distance computation.
+    - Real retail dataset baseline verification.
+    - Synthetic shock drift detection.
+    - Elasticity shift detection.
+    - All 4 health decision tiers verified.
+    - Report serialization, terminal summary, and JSON saving.
+    - REST API `/monitoring/drift` endpoint tests.
+    - Prometheus telemetry gauges.
+    - CLI `audit-drift` subcommand execution.
+    - Plotly chart builders for drift monitoring.
+  - Full repository test suite: **117 passed out of 117 tests (100% pass rate)**.
+
+
 
 
 

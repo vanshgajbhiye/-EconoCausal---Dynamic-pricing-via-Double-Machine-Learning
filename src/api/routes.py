@@ -11,6 +11,8 @@ from src.api.metrics import export_metrics, record_recommendation
 from src.api.schemas import (
     BatchPricingRequest,
     BatchPricingResponse,
+    DriftAuditRequest,
+    DriftAuditResponse,
     ElasticityRequest,
     ElasticityResponse,
     ErrorDetail,
@@ -246,3 +248,38 @@ async def simulate_portfolio_scenarios(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Scenario simulation error: {str(exc)}",
         ) from exc
+
+
+@router.post(
+    "/monitoring/drift",
+    response_model=DriftAuditResponse,
+    responses={
+        400: {"model": ErrorDetail, "description": "Invalid monitoring request payload"},
+        500: {"model": ErrorDetail, "description": "Internal drift audit failure"},
+    },
+    tags=["MLOps & Monitoring"],
+    summary="Audit Confounder, Elasticity & Target Distribution Drift",
+    description=(
+        "Performs real-time Population Stability Index (PSI), Kolmogorov-Smirnov test, and "
+        "Wasserstein distance evaluations on incoming production batches against reference "
+        "training data to detect covariate shift and trigger automated retraining."
+    ),
+)
+async def audit_production_drift(
+    request: DriftAuditRequest,
+    service: CausalPricingService = Depends(get_service),
+) -> DriftAuditResponse:
+    """Execute continuous causal MLOps drift audit on production batch."""
+    try:
+        return service.audit_drift(request)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Drift audit computation error: {str(exc)}",
+        ) from exc
+

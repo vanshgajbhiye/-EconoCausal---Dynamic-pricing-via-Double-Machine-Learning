@@ -211,6 +211,30 @@ Open your browser at `http://localhost:8501`.
 4. **⚔️ Competitor Response Simulator**: Game-theoretic retaliation analyzer modeling competitor reactions (Price Matching, Undercutting by 5% or 10%, Cooperative Shifts) with cross-price elasticity adjustments and strategic risk ratings.
 5. **📋 Catalog Batch Optimizer & CSV Exporter**: Interactive catalog table with search, category filtering, action badges (MARKUP, DISCOUNT, HOLD), and one-click timestamped CSV export.
 6. **🛡️ Causal Governance & Refutation Audit**: Live verification metrics for Neyman orthogonality, Placebo Treatment permutations, Random Common Cause confounder injections, and Data Subsampling stability.
+7. **🔍 Continuous Causal MLOps & Drift Monitor**: Real-time Population Stability Index (PSI) horizontal bar chart with 0.10 warning and 0.25 alert thresholds, comparative histogram/KDE distribution inspector across all 13 confounders, CATE elasticity distribution shift chart, and automated retraining trigger webhook simulation.
+
+---
+
+## 🛡️ Continuous Causal MLOps & Confounder Drift Monitoring (Day 10)
+
+EconoCausal incorporates enterprise continuous causal governance to safeguard dynamic pricing models against covariate shift, unobserved confounding, and market elasticity regime changes.
+
+### 1. Population Stability Index (PSI) Formula
+PSI = \\sum_{b=1}^B \\left( P_{target,b} - P_{baseline,b} \\right) \\times \\ln\\left( \\frac{P_{target,b}}{P_{baseline,b}} \\right)
+
+| PSI Value | Market Drift Classification | Automated Retraining Action |
+| :--- | :--- | :--- |
+| **$< 0.10$** | **STABLE (Healthy)** | Normal inference operations; no action required |
+| **.10 \\le PSI < 0.25$** | **MODERATE_DRIFT (Warning)** | Heightened monitoring; schedule weekly routine retraining |
+| **$\\ge 0.25$** | **SIGNIFICANT_DRIFT (Alert)** | Trigger automated DML pipeline retraining webhook |
+
+### 2. Multi-Criteria Automated Retraining Decision Matrix
+- **HEALTHY**: All confounder PSIs $< 0.10$ and 100% production refutation tests passed.
+- **WARNING**: Moderate drift (.10 \\le PSI < 0.25$) or product category elasticity regime flip.
+- **RETRAIN_RECOMMENDED**: Significant confounder drift (Max PSI $\\ge 0.25$) or CATE elasticity PSI $\\ge 0.25$.
+- **CRITICAL**: Active causal refutation failure ($< 67\\%$ pass rate) indicating unobserved confounding; pause automated pricing decisions immediately and revert to rule guardrails.
+
+For complete architectural details, mathematical proofs, and production operations runbooks, see [docs/capstone_handover.md](docs/capstone_handover.md).
 
 ---
 

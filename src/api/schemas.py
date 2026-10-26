@@ -322,3 +322,90 @@ class ErrorDetail(BaseModel):
     error: str = Field(..., description="Error classification.")
     detail: str = Field(..., description="Human-readable explanation of error.")
     timestamp: str = Field(..., description="ISO 8601 UTC timestamp.")
+
+
+class FeatureDriftDetail(BaseModel):
+    """Drift diagnostics for a single confounder or feature."""
+
+    feature_name: str
+    psi: float = Field(..., description="Population Stability Index (PSI).")
+    drift_level: str = Field(..., description="'STABLE', 'MODERATE_DRIFT', or 'SIGNIFICANT_DRIFT'.")
+    drift_detected: bool = Field(..., description="True if PSI >= warning threshold.")
+    is_categorical: bool = Field(default=False)
+    ks_stat: Optional[float] = Field(default=None, description="Kolmogorov-Smirnov two-sample test statistic.")
+    p_value: Optional[float] = Field(default=None, description="KS test p-value.")
+    wasserstein_distance: Optional[float] = Field(default=None, description="Earth Mover's Distance.")
+    baseline_mean: Optional[float] = Field(default=None)
+    target_mean: Optional[float] = Field(default=None)
+    mean_shift_pct: Optional[float] = Field(default=None, description="Percentage shift in mean.")
+
+
+class ElasticityDriftDetail(BaseModel):
+    """Drift diagnostics for heterogeneous CATE price elasticity distribution."""
+
+    psi: float
+    drift_level: str
+    baseline_mean: float
+    target_mean: float
+    delta_mean: float
+    ks_stat: float
+    p_value: float
+    num_regime_changes: int
+    regime_changes: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class RefutationAuditDetail(BaseModel):
+    """Diagnostics for continuous production refutation re-auditing."""
+
+    pass_rate: float
+    tests_passed: int
+    total_tests: int
+    placebo_treatment: Dict[str, Any]
+    random_common_cause: Dict[str, Any]
+    data_subset: Dict[str, Any]
+
+
+class DriftAuditRequest(BaseModel):
+    """Request payload to perform continuous confounder and elasticity drift detection."""
+
+    items: List[PricingItemInput] = Field(
+        ...,
+        min_length=1,
+        description="Batch of incoming production items to audit against baseline training distribution.",
+    )
+    run_refutations: bool = Field(
+        default=False,
+        description="Whether to run active causal refutation tests on production items (computationally intensive).",
+    )
+    psi_warning_threshold: float = Field(
+        default=0.10,
+        ge=0.01,
+        le=0.50,
+        description="Threshold for moderate drift warning (default 0.10).",
+    )
+    psi_alert_threshold: float = Field(
+        default=0.25,
+        ge=0.05,
+        le=1.00,
+        description="Threshold for significant drift alert triggering retraining (default 0.25).",
+    )
+
+
+class DriftAuditResponse(BaseModel):
+    """Comprehensive causal MLOps drift audit report response."""
+
+    timestamp: str
+    dataset_baseline_rows: int
+    dataset_target_rows: int
+    overall_status: str = Field(..., description="'HEALTHY', 'WARNING', 'RETRAIN_RECOMMENDED', or 'CRITICAL'.")
+    recommendation: str = Field(..., description="Actionable retraining or operational guidance.")
+    max_confounder_psi: float = Field(..., description="Maximum PSI observed among confounders.")
+    mean_confounder_psi: float = Field(..., description="Mean PSI across all audited confounders.")
+    num_drifting_confounders: int = Field(..., description="Count of confounders exhibiting drift.")
+    confounders: Dict[str, FeatureDriftDetail] = Field(..., description="Per-confounder drift breakdown.")
+    treatment_drift: Optional[FeatureDriftDetail] = None
+    outcome_drift: Optional[FeatureDriftDetail] = None
+    elasticity_drift: Optional[ElasticityDriftDetail] = None
+    refutation_audit: Optional[RefutationAuditDetail] = None
+    audit_latency_ms: float = Field(..., description="Audit computation time in milliseconds.")
+

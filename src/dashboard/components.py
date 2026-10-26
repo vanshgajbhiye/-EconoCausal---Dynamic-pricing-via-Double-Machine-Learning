@@ -532,3 +532,178 @@ def build_category_elasticity_chart(category_summary_df: pd.DataFrame) -> go.Fig
     )
 
     return fig
+
+
+def build_confounder_psi_chart(confounders_dict: Dict[str, Any]) -> go.Figure:
+    """Build horizontal bar chart of Population Stability Index (PSI) per confounder.
+
+    Features are colored by drift level:
+    - Green (#2a9d8f) for STABLE (PSI < 0.10)
+    - Orange (#e76f51) for MODERATE_DRIFT (0.10 <= PSI < 0.25)
+    - Red (#e63946) for SIGNIFICANT_DRIFT (PSI >= 0.25)
+    """
+    sorted_items = sorted(
+        confounders_dict.items(),
+        key=lambda item: item[1].get("psi", 0.0) if isinstance(item[1], dict) else getattr(item[1], "psi", 0.0),
+        reverse=False,
+    )
+
+    names = []
+    psi_values = []
+    colors = []
+    hover_texts = []
+
+    for name, data in sorted_items:
+        psi = data.get("psi", 0.0) if isinstance(data, dict) else getattr(data, "psi", 0.0)
+        level = data.get("drift_level", "STABLE") if isinstance(data, dict) else getattr(data, "drift_level", "STABLE")
+        ks = data.get("ks_stat") if isinstance(data, dict) else getattr(data, "ks_stat", None)
+        pval = data.get("p_value") if isinstance(data, dict) else getattr(data, "p_value", None)
+
+        names.append(name)
+        psi_values.append(psi)
+
+        if psi >= 0.25:
+            colors.append("#e63946")  # Alert Red
+        elif psi >= 0.10:
+            colors.append("#e76f51")  # Warning Orange
+        else:
+            colors.append("#2a9d8f")  # Stable Teal
+
+        ks_str = f"{ks:.4f}" if ks is not None else "N/A"
+        p_str = f"{pval:.4f}" if pval is not None else "N/A"
+        hover_texts.append(
+            f"<b>{name}</b><br>PSI: {psi:.4f}<br>Status: {level}<br>KS Stat: {ks_str}<br>p-value: {p_str}"
+        )
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Bar(
+            x=psi_values,
+            y=names,
+            orientation="h",
+            marker_color=colors,
+            hovertext=hover_texts,
+            hoverinfo="text",
+            text=[f"{v:.4f}" for v in psi_values],
+            textposition="auto",
+        )
+    )
+
+    # Reference lines for warning (0.10) and alert (0.25)
+    fig.add_vline(
+        x=0.10,
+        line_width=2,
+        line_dash="dot",
+        line_color="#e76f51",
+        annotation_text="Warning (0.10)",
+        annotation_position="top right",
+    )
+    fig.add_vline(
+        x=0.25,
+        line_width=2,
+        line_dash="dash",
+        line_color="#e63946",
+        annotation_text="Alert / Retrain (0.25)",
+        annotation_position="top right",
+    )
+
+    fig.update_layout(
+        title="<b>Confounder Covariate Shift: Population Stability Index (PSI)</b>",
+        xaxis_title="<b>Population Stability Index (PSI)</b>",
+        yaxis_title="<b>Confounder Covariate</b>",
+        template="plotly_white",
+        margin=dict(l=140, r=60, t=70, b=50),
+    )
+
+    return fig
+
+
+def build_distribution_comparison_chart(
+    baseline_series: pd.Series,
+    target_series: pd.Series,
+    feature_name: str,
+) -> go.Figure:
+    """Build side-by-side comparative histogram / KDE for a specific feature."""
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Histogram(
+            x=baseline_series.dropna(),
+            name="Baseline (Training)",
+            opacity=0.6,
+            marker_color="#1d3557",
+            histnorm="probability density",
+        )
+    )
+    fig.add_trace(
+        go.Histogram(
+            x=target_series.dropna(),
+            name="Target (Production)",
+            opacity=0.6,
+            marker_color="#e63946",
+            histnorm="probability density",
+        )
+    )
+
+    fig.update_layout(
+        title=f"<b>Distribution Comparison: {feature_name}</b>",
+        barmode="overlay",
+        xaxis_title=f"<b>{feature_name}</b>",
+        yaxis_title="<b>Probability Density</b>",
+        template="plotly_white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+        margin=dict(l=50, r=50, t=80, b=50),
+    )
+
+    return fig
+
+
+def build_elasticity_shift_chart(
+    base_elasticity: np.ndarray,
+    target_elasticity: np.ndarray,
+) -> go.Figure:
+    """Build comparative distribution chart for predicted CATE elasticity distributions."""
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Histogram(
+            x=base_elasticity,
+            name=f"Baseline CATE (\u03bc={np.mean(base_elasticity):.2f})",
+            opacity=0.6,
+            marker_color="#457b9d",
+            histnorm="probability density",
+        )
+    )
+    fig.add_trace(
+        go.Histogram(
+            x=target_elasticity,
+            name=f"Production CATE (\u03bc={np.mean(target_elasticity):.2f})",
+            opacity=0.6,
+            marker_color="#2a9d8f",
+            histnorm="probability density",
+        )
+    )
+
+    # Unit elasticity boundary
+    fig.add_vline(
+        x=-1.0,
+        line_width=2,
+        line_dash="dash",
+        line_color="#e63946",
+        annotation_text="Unit Elasticity (-1.0)",
+        annotation_position="top left",
+    )
+
+    fig.update_layout(
+        title="<b>Heterogeneous CATE Price Elasticity Distribution Shift</b>",
+        barmode="overlay",
+        xaxis_title="<b>Predicted Causal Elasticity (\u03b8)</b>",
+        yaxis_title="<b>Probability Density</b>",
+        template="plotly_white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+        margin=dict(l=50, r=50, t=80, b=50),
+    )
+
+    return fig
+

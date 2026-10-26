@@ -22,6 +22,7 @@ from typing import List, Optional
 import pandas as pd
 
 from src.data.load_data import load_retail_price_dataset
+from src.monitoring.drift import CausalDriftDetector
 from src.pipeline import EconoCausalPipeline
 
 
@@ -196,6 +197,54 @@ def create_parser() -> argparse.ArgumentParser:
         help="Optional destination path for scenario comparison CSV",
     )
 
+    # 5. AUDIT-DRIFT SUBCOMMAND
+    drift_parser = subparsers.add_parser(
+        "audit-drift",
+        help="Audit confounder and elasticity drift between baseline and production datasets.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    drift_parser.add_argument(
+        "--baseline",
+        type=str,
+        default="data/raw/retail_price.csv",
+        help="Path to baseline reference dataset CSV",
+    )
+    drift_parser.add_argument(
+        "--target",
+        type=str,
+        required=True,
+        help="Path to incoming production evaluation dataset CSV",
+    )
+    drift_parser.add_argument(
+        "--model",
+        type=str,
+        default="models/econocausal_pipeline.joblib",
+        help="Optional path to trained pipeline model for elasticity and refutation re-audits",
+    )
+    drift_parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Optional destination path to export JSON drift report",
+    )
+    drift_parser.add_argument(
+        "--run-refutations",
+        action="store_true",
+        help="Execute active causal refutations on target data (computationally intensive)",
+    )
+    drift_parser.add_argument(
+        "--warning-threshold",
+        type=float,
+        default=0.10,
+        help="PSI threshold for moderate drift warning",
+    )
+    drift_parser.add_argument(
+        "--alert-threshold",
+        type=float,
+        default=0.25,
+        help="PSI threshold for significant drift alert triggering retraining",
+    )
+
     return parser
 
 
@@ -359,6 +408,57 @@ def handle_simulate(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_audit_drift(args: argparse.Namespace) -> int:
+    """Execute continuous confounder and elasticity drift audit."""
+    print(f"\n[EconoCausal CLI] Loading reference baseline dataset from: {args.baseline}")
+    if not os.path.exists(args.baseline):
+        print(f"Error: Baseline dataset file not found at: {args.baseline}", file=sys.stderr)
+        return 1
+
+    print(f"[EconoCausal CLI] Loading target production dataset from: {args.target}")
+    if not os.path.exists(args.target):
+        print(f"Error: Target dataset file not found at: {args.target}", file=sys.stderr)
+        return 1
+
+    baseline_df = load_retail_price_dataset(args.baseline)
+    target_df = load_retail_price_dataset(args.target)
+
+    pipeline = None
+    if args.model and os.path.exists(args.model):
+        print(f"[EconoCausal CLI] Loading trained pipeline for elasticity and refutation re-auditing: {args.model}")
+        try:
+            pipeline = EconoCausalPipeline.load(args.model)
+        except Exception as e:
+            print(f"[EconoCausal CLI] Warning: Failed to load pipeline model ({e}); proceeding with confounder drift only.")
+
+    detector = CausalDriftDetector(
+        psi_warning_threshold=args.warning_threshold,
+        psi_alert_threshold=args.alert_threshold,
+    )
+
+    print(f"[EconoCausal CLI] Running causal drift analysis (Refutations: {args.run_refutations})...")
+    report = detector.generate_report(
+        baseline_df=baseline_df,
+        target_df=target_df,
+        pipeline=pipeline,
+        run_refutations=args.run_refutations,
+    )
+
+    print("\n" + report.summary())
+
+    if args.output:
+        os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+        report.save_json(args.output)
+        print(f"\n[EconoCausal CLI] Detailed JSON drift report exported to: {args.output}")
+
+    # Return status: 0 for HEALTHY/WARNING, 2 for RETRAIN_RECOMMENDED, 3 for CRITICAL
+    if report.overall_status == "CRITICAL":
+        return 3
+    elif report.overall_status == "RETRAIN_RECOMMENDED":
+        return 2
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Main CLI entry point."""
     parser = create_parser()
@@ -376,9 +476,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         return handle_predict_item(args)
     elif args.command == "simulate":
         return handle_simulate(args)
+    elif args.command == "audit-drift":
+        return handle_audit_drift(args)
     else:
         parser.print_help()
         return 1
+
 
 
 if __name__ == "__main__":

@@ -69,6 +69,50 @@ MODEL_INFO = Info(
     documentation="Causal ML model architecture, baseline ATE, and refutation score",
 )
 
+# Confounder distribution drift gauges
+CONFOUNDER_MAX_PSI = Gauge(
+    name="econocausal_confounder_max_psi",
+    documentation="Maximum Population Stability Index (PSI) observed across confounders",
+)
+
+CONFOUNDER_MEAN_PSI = Gauge(
+    name="econocausal_confounder_mean_psi",
+    documentation="Mean Population Stability Index (PSI) across audited confounders",
+)
+
+DRIFT_HEALTH_STATUS = Gauge(
+    name="econocausal_drift_health_status",
+    documentation="Causal MLOps drift status code: 0=HEALTHY, 1=WARNING, 2=RETRAIN_RECOMMENDED, 3=CRITICAL",
+)
+
+PROD_REFUTATION_PASS_RATE = Gauge(
+    name="econocausal_refutation_prod_pass_rate",
+    documentation="Causal refutation test pass rate on production data (0.0 to 1.0)",
+)
+
+
+def record_drift_audit(
+    max_psi: float,
+    mean_psi: float,
+    status_str: str,
+    refutation_pass_rate: Optional[float] = None,
+) -> None:
+    """Record Prometheus telemetry for a causal MLOps drift audit."""
+    CONFOUNDER_MAX_PSI.set(max_psi)
+    CONFOUNDER_MEAN_PSI.set(mean_psi)
+
+    status_map = {
+        "HEALTHY": 0,
+        "WARNING": 1,
+        "RETRAIN_RECOMMENDED": 2,
+        "CRITICAL": 3,
+    }
+    DRIFT_HEALTH_STATUS.set(status_map.get(status_str.upper(), 0))
+
+    if refutation_pass_rate is not None:
+        PROD_REFUTATION_PASS_RATE.set(refutation_pass_rate)
+
+
 
 def init_model_info(
     version: str = "1.0.0",

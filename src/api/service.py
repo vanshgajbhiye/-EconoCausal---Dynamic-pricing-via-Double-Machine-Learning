@@ -11,25 +11,33 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from src.api.metrics import record_drift_audit
 from src.api.schemas import (
     BatchPricingRequest,
     BatchPricingResponse,
+    DriftAuditRequest,
+    DriftAuditResponse,
+    ElasticityDriftDetail,
     ElasticityRequest,
     ElasticityResponse,
     ElasticityResponseItem,
+    FeatureDriftDetail,
     HealthResponse,
     ModelMetadataResponse,
     PricingItemInput,
     PortfolioScenarioRequest,
     PortfolioScenarioResponse,
+    RefutationAuditDetail,
     ScenarioResult,
     SingleItemPricingRequest,
     SingleItemPricingResponse,
 )
+from src.monitoring.drift import CausalDriftDetector
 from src.pipeline import EconoCausalPipeline
 
 
 DEFAULT_MODEL_PATH = os.path.join("models", "econocausal_pipeline.joblib")
+DEFAULT_DATA_PATH = os.path.join("data", "raw", "retail_price.csv")
 
 
 class CausalPricingService:
@@ -37,10 +45,12 @@ class CausalPricingService:
 
     _instance: Optional["CausalPricingService"] = None
 
-    def __init__(self, model_path: Optional[str] = None):
+    def __init__(self, model_path: Optional[str] = None, baseline_path: Optional[str] = None):
         self.start_time = time.time()
         self.model_path = model_path or os.getenv("ECONOCAUSAL_MODEL_PATH", DEFAULT_MODEL_PATH)
+        self.baseline_path = baseline_path or os.getenv("ECONOCAUSAL_DATA_PATH", DEFAULT_DATA_PATH)
         self.pipeline: Optional[EconoCausalPipeline] = None
+        self._cached_baseline_df: Optional[pd.DataFrame] = None
         self._total_requests_served = 0
         self._load_pipeline()
 
@@ -338,3 +348,95 @@ class CausalPricingService:
             recommended_strategy=best_strat,
             simulation_latency_ms=latency_ms,
         )
+
+    def _get_baseline_df(self) -> pd.DataFrame:
+        """Load or return cached reference baseline dataset."""
+        if self._cached_baseline_df is not None:
+            return self._cached_baseline_df
+        if os.path.exists(self.baseline_path):
+            try:
+                self._cached_baseline_df = pd.read_csv(self.baseline_path)
+                return self._cached_baseline_df
+            except Exception:
+                pass
+        return pd.DataFrame()
+
+    def audit_drift(self, request: DriftAuditRequest) -> DriftAuditResponse:
+        """Audit incoming production batch for covariate and elasticity drift."""
+        t0 = time.perf_counter()
+        target_df = pd.DataFrame([item.to_inference_dict() for item in request.items])
+        baseline_df = self._get_baseline_df()
+
+        if baseline_df.empty:
+            baseline_df = target_df.copy()
+
+        detector = CausalDriftDetector(
+            psi_warning_threshold=request.psi_warning_threshold,
+            psi_alert_threshold=request.psi_alert_threshold,
+        )
+
+        report = detector.generate_report(
+            baseline_df=baseline_df,
+            target_df=target_df,
+            pipeline=self.pipeline,
+            run_refutations=request.run_refutations,
+        )
+
+        refut_pass_rate = None
+        if report.refutation_audit is not None:
+            refut_pass_rate = report.refutation_audit.get("pass_rate")
+        elif self.is_ready:
+            refut_pass_rate = self.pipeline.refutation_pass_rate_
+
+        record_drift_audit(
+            max_psi=report.max_confounder_psi,
+            mean_psi=report.mean_confounder_psi,
+            status_str=report.overall_status,
+            refutation_pass_rate=refut_pass_rate,
+        )
+
+        latency_ms = round((time.perf_counter() - t0) * 1000.0, 3)
+
+        confounders_dict = {
+            k: FeatureDriftDetail(**v.to_dict())
+            for k, v in report.confounder_drift.items()
+        }
+
+        treatment_detail = (
+            FeatureDriftDetail(**report.treatment_drift.to_dict())
+            if report.treatment_drift
+            else None
+        )
+        outcome_detail = (
+            FeatureDriftDetail(**report.outcome_drift.to_dict())
+            if report.outcome_drift
+            else None
+        )
+        elasticity_detail = (
+            ElasticityDriftDetail(**report.elasticity_drift)
+            if report.elasticity_drift
+            else None
+        )
+        refutation_detail = (
+            RefutationAuditDetail(**report.refutation_audit)
+            if report.refutation_audit
+            else None
+        )
+
+        return DriftAuditResponse(
+            timestamp=report.timestamp,
+            dataset_baseline_rows=report.dataset_baseline_rows,
+            dataset_target_rows=report.dataset_target_rows,
+            overall_status=report.overall_status,
+            recommendation=report.recommendation,
+            max_confounder_psi=report.max_confounder_psi,
+            mean_confounder_psi=report.mean_confounder_psi,
+            num_drifting_confounders=report.num_drifting_confounders,
+            confounders=confounders_dict,
+            treatment_drift=treatment_detail,
+            outcome_drift=outcome_detail,
+            elasticity_drift=elasticity_detail,
+            refutation_audit=refutation_detail,
+            audit_latency_ms=latency_ms,
+        )
+
