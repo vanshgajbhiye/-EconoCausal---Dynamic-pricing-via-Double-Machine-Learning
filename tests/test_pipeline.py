@@ -129,6 +129,25 @@ def test_pipeline_predict_item_missing_features_imputation(fitted_synthetic_pipe
     assert res["optimal_price"] > 0
 
 
+def test_pipeline_zero_leakage_imputation(synthetic_data):
+    """Verify that fallback feature imputation values are strictly fitted on training partition only."""
+    from src.data.preprocess import split_causal_data
+
+    pipeline = EconoCausalPipeline(
+        n_splits=3,
+        random_state=42,
+        categorical_confounders=["product_category_name"],
+    )
+    pipeline.fit(synthetic_data, test_size=0.20, run_refutations=False)
+
+    splits = split_causal_data(synthetic_data, test_size=0.20, random_state=42)
+    df_train = synthetic_data.loc[splits["X_train"].index]
+
+    for col in pipeline.raw_numerical_cols_:
+        expected_median = float(df_train[col].median(skipna=True))
+        assert pipeline.feature_imputation_values_[col] == pytest.approx(expected_median, rel=1e-5)
+
+
 def test_pipeline_batch_recommend_and_export(fitted_synthetic_pipeline, synthetic_data):
     """Verify batch catalog recommendations generation and CSV/JSON export."""
     p = fitted_synthetic_pipeline

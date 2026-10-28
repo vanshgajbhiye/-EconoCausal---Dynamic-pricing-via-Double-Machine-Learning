@@ -185,14 +185,7 @@ class EconoCausalPipeline:
         self.raw_categorical_cols_ = active_categoricals
         self.raw_numerical_cols_ = [c for c in active_confounders if c not in active_categoricals]
 
-        # 3. Store training medians / modes for robust real-time imputation
-        for col in self.raw_numerical_cols_:
-            self.feature_imputation_values_[col] = float(df[col].median(skipna=True))
-        for col in self.raw_categorical_cols_:
-            mode_val = df[col].mode(dropna=True)
-            self.feature_imputation_values_[col] = str(mode_val.iloc[0]) if len(mode_val) > 0 else "unknown"
-
-        # 4. Anti-leakage Causal Splitting & Preprocessing
+        # 3. Anti-leakage Causal Splitting & Preprocessing
         splits = split_causal_data(
             df,
             test_size=test_size,
@@ -210,6 +203,14 @@ class EconoCausalPipeline:
         X_train = splits["X_train"]
         T_train = splits["T_train"]
         Y_train = splits["Y_train"]
+
+        # 4. Store training medians / modes strictly from training partition for zero-leakage runtime imputation
+        df_train = df.loc[X_train.index]
+        for col in self.raw_numerical_cols_:
+            self.feature_imputation_values_[col] = float(df_train[col].median(skipna=True))
+        for col in self.raw_categorical_cols_:
+            mode_val = df_train[col].mode(dropna=True)
+            self.feature_imputation_values_[col] = str(mode_val.iloc[0]) if len(mode_val) > 0 else "unknown"
 
         # 5. Fit Double Machine Learning Baseline (ATE)
         self.dml_estimator = DoubleMachineLearning(
@@ -607,6 +608,11 @@ class EconoCausalPipeline:
 
         abs_path = os.path.abspath(filepath)
         os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        if os.path.exists(abs_path):
+            try:
+                os.remove(abs_path)
+            except OSError:
+                pass
         joblib.dump(self, abs_path, compress=3)
         return abs_path
 
