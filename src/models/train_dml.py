@@ -58,15 +58,19 @@ class DoubleMachineLearning:
         n_folds: int = 5,
         random_state: int = 42,
         shuffle: bool = True,
+        alpha: float = 0.05,
     ):
         if n_folds < 2:
             raise ValueError(f"n_folds must be at least 2, got {n_folds}")
+        if not (0 < alpha < 1):
+            raise ValueError(f"alpha must be between 0 and 1, got {alpha}")
 
         self.model_y = model_y
         self.model_t = model_t
         self.n_folds = n_folds
         self.random_state = random_state
         self.shuffle = shuffle
+        self.alpha = alpha
 
         # Learned attributes
         self.theta_: Optional[float] = None
@@ -226,7 +230,7 @@ class DoubleMachineLearning:
         p_val = 2.0 * (1.0 - stats.norm.cdf(abs(t_stat)))
         self.p_value_ = float(p_val)
 
-        z_crit = 1.959963984540054  # 95% confidence critical value
+        z_crit = float(stats.norm.ppf(1.0 - self.alpha / 2.0))
         ci_lower = self.theta_ - z_crit * self.std_error_
         ci_upper = self.theta_ + z_crit * self.std_error_
         self.ci_ = (float(ci_lower), float(ci_upper))
@@ -274,6 +278,28 @@ class DoubleMachineLearning:
         self._is_fitted = True
         return self
 
+    def confidence_interval(self, alpha: Optional[float] = None) -> Tuple[float, float]:
+        """Compute asymptotic confidence interval for causal parameter theta.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Significance level (e.g. 0.05 for 95% CI, 0.01 for 99% CI).
+            Defaults to the alpha specified at initialization.
+
+        Returns
+        -------
+        Tuple[float, float]
+            (ci_lower, ci_upper)
+        """
+        if not self._is_fitted:
+            raise ValueError("Model is not fitted yet. Call 'fit' before 'confidence_interval'.")
+        level = alpha if alpha is not None else self.alpha
+        if not (0 < level < 1):
+            raise ValueError(f"alpha must be between 0 and 1, got {level}")
+        z = float(stats.norm.ppf(1.0 - level / 2.0))
+        return (float(self.theta_ - z * self.std_error_), float(self.theta_ + z * self.std_error_))
+
     def summary(self) -> Dict[str, Any]:
         """Return structured summary of the DML estimation results."""
         if not self._is_fitted:
@@ -287,6 +313,8 @@ class DoubleMachineLearning:
             "ci_95": self.ci_,
             "ci_lower": self.ci_[0],
             "ci_upper": self.ci_[1],
+            "alpha": self.alpha,
+            "ci_level": 1.0 - self.alpha,
             "n_folds": self.n_folds,
             "nuisance_scores": self.nuisance_scores_,
             "residual_diagnostics": self.residual_diagnostics_,
