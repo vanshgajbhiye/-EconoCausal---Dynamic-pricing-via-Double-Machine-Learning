@@ -49,6 +49,30 @@ The official dataset contains 676 monthly observations across multiple retail pr
 
 ---
 
+## 2.1 Engineered Causal Features (`src/data/preprocess.py`)
+
+Domain-engineered pre-treatment confounders generated via `engineer_causal_features()`:
+
+| Engineered Feature | Data Type | Role in Causal Graph | Formula / Derivation | Causal Justification |
+| :--- | :--- | :--- | :--- | :--- |
+| `comp_price_diff_1` | Float | **Pre-Treatment Confounder ($X$)** | `lag_price - comp_1` | Price positioning relative to key competitor prior to intervention |
+| `comp_price_ratio_1` | Float | **Pre-Treatment Confounder ($X$)** | `comp_1 / lag_price` | Relative price ratio vs competitor 1 |
+| `comp_price_min` | Float | **Pre-Treatment Confounder ($X$)** | `min(comp_1, comp_2, comp_3)` | Most aggressive market competitor price |
+| `comp_price_max` | Float | **Pre-Treatment Confounder ($X$)** | `max(comp_1, comp_2, comp_3)` | Upper ceiling competitor price |
+| `comp_price_mean` | Float | **Pre-Treatment Confounder ($X$)** | `mean(comp_1, comp_2, comp_3)` | Market baseline price |
+| `comp_price_spread` | Float | **Pre-Treatment Confounder ($X$)** | `comp_max - comp_min` | Market price dispersion and competitive uncertainty |
+| `lag_price_diff_comp_min` | Float | **Pre-Treatment Confounder ($X$)** | `lag_price - comp_price_min` | Distance between prior price and lowest competitor price |
+| `sin_month`, `cos_month` | Float | **Pre-Treatment Confounder ($X$)** | `sin(2π*m/12)`, `cos(2π*m/12)` | Cyclical calendar seasonality (smooth month 12 to 1 transition) |
+| `is_q4` | Float | **Pre-Treatment Confounder ($X$)** | `month in [10, 11, 12]` | High-volume Q4 holiday shopping season indicator |
+| `weekend_ratio` | Float | **Pre-Treatment Confounder ($X$)** | `weekend / (weekday + weekend)` | Proportion of weekend traffic days in period |
+| `holiday_ratio` | Float | **Pre-Treatment Confounder ($X$)** | `holiday / (weekday + weekend)` | Frequency of promotional holidays in period |
+| `historical_discount_rate`| Float | **Pre-Treatment Confounder ($X$)** | `(P_ref - lag_price) / P_ref` | Historical discount depth at t-1 (anchored on pre-treatment reference) |
+| `is_lag_discounted` | Float | **Pre-Treatment Confounder ($X$)** | `historical_discount_rate > 0.05` | Pre-existing promotional discount status prior to price intervention |
+| `customers_per_day` | Float | **Pre-Treatment Confounder ($X$)** | `customers / (weekday + weekend)` | Normalized daily customer traffic density |
+| `comp_freight_diff_1` | Float | **Pre-Treatment Confounder ($X$)** | `freight_price - fp1` | Shipping fee competitiveness vs competitor 1 |
+
+---
+
 ## 3. Causal Role Justifications
 
 ### Treatment ($T$ = `unit_price`)
@@ -66,6 +90,9 @@ The official dataset contains 676 monthly observations across multiple retail pr
 
 ### Leakage Prevention
 - **`total_price`**: Mechanically computed as `unit_price * qty`. Must **NEVER** be included in the confounder matrix $X$ to prevent target leakage.
+- **Current Period Discount**: Any calculation using current `unit_price` (e.g. `(lag_price - unit_price) / lag_price`) is a post-treatment consequence of intervention and is strictly prohibited in confounder matrices.
+- **`CausalLeakageError`**: Guardrail exception raised whenever treatment, outcome targets, or post-treatment colliders/mediators are detected in confounders.
+- Detailed audit specifications available in [`docs/causal_features.md`](file:///D:/EconoCausalProject2026/docs/causal_features.md).
 
 ---
 

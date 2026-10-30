@@ -436,6 +436,64 @@ This document records causal machine learning experiments, datasets used, baseli
 
 - **Verification**: All 12 automated tests in `tests/test_dml_robustness.py` pass in **5.01s**. Full DML test suite passes cleanly.
 
+---
+
+### Experiment ID: EXP-20261030-01 (Day 13 — Feature Engineering, Confounder Audit & Anti-Leakage Framework)
+- **Date**: 2026-10-30
+- **Author**: Rohit / Data Training & Causal ML
+- **Dataset Version / Source**: Official Kaggle Retail Price Optimization (`data/raw/retail_price.csv`), $N = 676$ monthly SKU transactions.
+- **Treatment (T)**: `unit_price` / `log(unit_price)` (Continuous Pricing Decision)
+- **Outcome (Y)**: `qty` / `log(qty)` (Demand Volume)
+- **Covariates (X)**: 13 canonical confounders + domain-engineered pre-treatment confounders (competitor price gaps, discount history, cyclical seasonality, customer footprint, product attributes).
+- **Deliverable Scope**:
+  - `src/data/preprocess.py`: Upgraded `CausalPreprocessor`, domain feature engineer `engineer_causal_features()`, causal confounder audit `audit_confounders()`, and `CausalLeakageError`.
+  - `docs/causal_features.md`: Complete mathematical and econometric specification of confounder audit and anti-leakage taxonomy.
+  - `docs/data_dictionary.md`: Updated variable schema including all 15 newly engineered causal confounders.
+  - `tests/test_leakage.py`: 20 new tests verifying pre-treatment isolation, treatment leakage, target leakage, collider bias, training-only imputation, unseen categories, and schema consistency.
+  - `tests/test_preprocessing.py`: 15 existing tests verifying baseline compatibility.
+
+#### 1. Confounder Audit & Pre-Treatment Classification
+Audited all 13 existing confounders in `DEFAULT_CONFOUNDER_COLS`. All 13 verified as strictly pre-treatment common causes:
+- Market Competition: `comp_1`, `comp_2`, `comp_3`, `fp1`, `fp2`, `fp3`
+- Product Reputation: `product_score`
+- Market Size / Potential: `customers`
+- Seasonality & Calendar: `s`, `weekday`, `holiday`
+- Historical Price Anchor: `lag_price`
+- Store Logistics: `freight_price`
+
+#### 2. Domain-Engineered Causal Features
+1. **Pre-Treatment Competitor-Price Gaps & Dispersion**:
+   - `comp_price_diff_1 = lag_price - comp_1` (Mean: +$27.95, Std: $76.45)
+   - `comp_price_ratio_1 = comp_1 / lag_price`
+   - `comp_price_min`, `comp_price_max`, `comp_price_mean`, `comp_price_spread` ($P_{\max} - P_{\min}$)
+   - `lag_price_diff_comp_min`, `comp_freight_diff_1`, `comp_score_diff_1`
+   - *Strict Pre-Treatment Guarantee*: All gap metrics computed with `lag_price`, NEVER current `unit_price`.
+2. **Seasonality & Cyclical Calendar Dynamics**:
+   - Continuous cyclical month encoding: `sin_month = sin(2π*month/12)`, `cos_month = cos(2π*month/12)` (smooth December-to-January adjacency).
+   - Q4 holiday shopping surge indicator: `is_q4`.
+   - Traffic mix: `weekend_ratio = weekend / (weekday + weekend)`, `holiday_ratio = holiday / (weekday + weekend)`.
+3. **Pre-Treatment Discount History**:
+   - `historical_discount_rate = (P_ref - lag_price) / P_ref` (Mean: 9.00%, Max: 54.66%) anchored on pre-treatment reference prices.
+   - Binary promotional flag: `is_lag_discounted` ($\text{rate} > 5\%$).
+4. **Product Category & Characteristics**:
+   - One-hot encoded `product_category_name` with `handle_unknown="ignore"`.
+   - Customer interaction density: `customers_per_day = customers / total_days`.
+   - Physical attributes: `product_weight_g`, `volume`, `product_photos_qty`, `product_description_lenght`.
+
+#### 3. Strict Causal Separation & Anti-Leakage Guardrails
+- **Treatment Leakage Prevention**: Inclusion of `unit_price`, `price`, `log_unit_price`, or derived contemporaneous discount in confounders immediately triggers `CausalLeakageError`.
+- **Target Leakage Prevention**: Inclusion of `qty`, `units_sold` triggers `CausalLeakageError`.
+- **Collider & Mediator Prevention**: Inclusion of `total_price` ($P \times Q$), `revenue`, `profit`, or `conversion_rate` triggers `CausalLeakageError`.
+- **Zero-Leakage Missing Data Imputation**: `SimpleImputer` fits strictly on `X_train` training partition; test evaluation data uses frozen training medians/modes.
+- **Unseen Category Robustness**: Unseen categories in production inference map cleanly to all-zero one-hot vectors without exceptions.
+- **Schema Consistency**: Column output ordering strictly aligns with `feature_names_out_`; extra columns are safely ignored; missing columns are imputed with baseline values.
+
+#### 4. Verification Suite Results
+- `tests/test_preprocessing.py`: **15 passed** in 5.25s
+- `tests/test_leakage.py`: **20 passed** in 7.20s
+- Total Feature & Preprocessing Suite: **35 passed out of 35 tests (100% pass rate)**.
+
+
 
 
 
