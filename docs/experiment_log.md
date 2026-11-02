@@ -493,6 +493,40 @@ Audited all 13 existing confounders in `DEFAULT_CONFOUNDER_COLS`. All 13 verifie
 - `tests/test_leakage.py`: **20 passed** in 7.20s
 - Total Feature & Preprocessing Suite: **35 passed out of 35 tests (100% pass rate)**.
 
+---
+
+### Experiment ID: EXP-20261102-14 (CATE and Heterogeneous Price Elasticity Validation)
+- **Date**: 2026-11-02
+- **Author**: Rohit Sahu / Causal AI Engineering
+- **Deliverables**: `docs/cate_validation.md`, `src/models/cate.py`, `tests/test_cate.py`
+- **Treatment (T)**: `log(unit_price)` (Constant Elasticity Specification)
+- **Outcome (Y)**: `log(qty)` (Demand Volume)
+- **Covariates (X)**: 22 preprocessed causal features including competitor prices, freight rates, reviews, customer footfall, seasonality, and product categories.
+- **Sample Size (N)**: 540 training / 136 holdout (676 total observations)
+- **CATE Architecture**:
+  - Double Machine Learning (DML) R-learner residual interaction formulation.
+  - Second-stage Ridge parameter estimation ($\alpha = 1.0$) with unpenalized baseline intercept.
+  - Asymptotic heteroskedasticity-consistent sandwich covariance matrix $\Sigma_\beta$.
+- **Validation Scope & Findings**:
+  1. **Product Group Elasticity Heterogeneity**:
+     - Significant variation: $\hat{\theta} \in [-1.8329, -0.9850]$.
+     - `computers_accessories`: Most price-sensitive ($\hat{\theta} = -1.8329$, $\beta_j = -0.5542$, $p = 0.0145$). Aggressive discounting generates high unit volume surges.
+     - `cool_stuff`: Inelastic ($\hat{\theta} = -0.9850$). Price increases expand gross margins.
+  2. **Customer Footfall Moderation**:
+     - High Footfall ($>100$ customers): Mean $\hat{\theta} = -1.542$ ($p_{\text{unit}} < 0.0001$). Highly elastic deal-seekers.
+     - Low Footfall ($<35$ customers): Mean $\hat{\theta} = -0.880$ ($p_{\text{unit}} < 0.0001$). Inelastic niche/captive demand.
+  3. **Unit-Elasticity Boundary ($\theta = -1.0$)**:
+     - Statistical hypothesis testing $H_0: \theta = -1.0$ vs $H_1: \theta \neq -1.0$.
+     - `watches_gifts` fails to reject unit elasticity ($\hat{\theta} = -1.0415$, $t = -0.08$, $p = 0.9353$). Marginal revenue is zero ($\partial R / \partial P \approx 0$).
+  4. **Cross-Fitting Fold Stability (5-Fold CV)**:
+     - 100% sign consistency across all folds and categories ($\hat{\theta} < 0$).
+     - Low coefficient of variation ($\text{CV} \le 0.30$) across core product segments.
+  5. **Unsupported Extrapolations Flagged**:
+     - Small sample categories (`consoles_games`, $N=15$) and out-of-support queries outside empirical bounding boxes flagged with safety fallback to catalog baseline ATE.
+- **Verification Suite Results**:
+  - `tests/test_cate.py`: **12 passed out of 12 tests (100% pass rate)**.
+  - Flake8 syntax hygiene: **0 violations**.
+
 
 
 

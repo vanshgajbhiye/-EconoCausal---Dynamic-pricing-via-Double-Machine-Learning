@@ -178,3 +178,283 @@ def test_cate_real_retail_price_dataset():
     assert "mean_elasticity" in category_summary.columns
     # Check that categories have distinct elasticities (heterogeneity is present)
     assert category_summary["mean_elasticity"].nunique() > 1
+
+
+def test_cate_uncertainty_quantification(synthetic_heterogeneous_data):
+    """Test individual CATE prediction with sandwich standard errors and confidence intervals."""
+    X_df, T, Y, _ = synthetic_heterogeneous_data
+    cate_est = CATEEstimator(
+        dml_base=DoubleMachineLearning(model_y=Ridge(alpha=0.5), model_t=Ridge(alpha=0.5), n_folds=3),
+        moderator_cols=["feat_0", "feat_1"],
+        alpha=0.1,
+        random_state=42,
+    ).fit(X_df, T, Y)
+
+    uncert_df = cate_est.predict_cate_with_uncertainty(X_df, alpha=0.05)
+
+    assert isinstance(uncert_df, pd.DataFrame)
+    assert len(uncert_df) == len(X_df)
+    for col in [
+        "predicted_elasticity",
+        "std_error",
+        "ci_lower",
+        "ci_upper",
+        "t_stat_unit",
+        "p_value_unit",
+        "elasticity_regime",
+        "is_statistically_significant",
+    ]:
+        assert col in uncert_df.columns
+
+    # Standard errors must be strictly positive
+    assert (uncert_df["std_error"] > 0).all()
+
+    # Confidence interval ordering: ci_lower < predicted_elasticity < ci_upper
+    assert (uncert_df["ci_lower"] < uncert_df["predicted_elasticity"]).all()
+    assert (uncert_df["predicted_elasticity"] < uncert_df["ci_upper"]).all()
+
+    # Point estimate must match predict_cate
+    preds = cate_est.predict_cate(X_df)
+    np.testing.assert_allclose(uncert_df["predicted_elasticity"].values, preds, rtol=1e-5)
+
+
+def test_unit_elasticity_boundary_interpretation():
+    """Test statistical hypothesis testing against the unit-elasticity boundary theta = -1.0.
+
+    Under log-log demand (Y = log(Q), T = log(P)):
+        dR / dP = (1 + theta) * Q(P)
+    - theta < -1: Elastic demand (price cuts expand revenue).
+    - theta = -1: Unitary elasticity (marginal revenue = 0).
+    - -1 < theta < 0: Inelastic demand (price hikes expand revenue).
+    """
+    np.random.seed(42)
+    n = 600
+    # Group indicator: 0 -> elastic (theta=-2.2), 1 -> unit-elastic (theta=-1.0), 2 -> inelastic (theta=-0.4)
+    group = np.random.choice([0, 1, 2], size=n)
+    G = pd.get_dummies(group, prefix="grp", drop_first=False, dtype=float)
+
+    # Elasticity per group
+    true_thetas = np.array([-2.2, -1.0, -0.4])
+    theta_i = true_thetas[group]
+
+    T = np.random.randn(n)
+    Y = theta_i * T + np.random.randn(n) * 0.5
+    X = G.copy()
+
+    cate_est = CATEEstimator(
+        dml_base=DoubleMachineLearning(model_y=Ridge(), model_t=Ridge(), n_folds=3),
+        moderator_cols=list(G.columns),
+        include_intercept=False,
+        alpha=0.01,
+        random_state=42,
+    ).fit(X, T, Y)
+
+    labels = pd.Series(group).map({0: "Elastic_Group", 1: "Unit_Elastic_Group", 2: "Inelastic_Group"})
+    summary = cate_est.cate_by_segment(labels, X=X, alpha=0.05)
+
+    assert "t_stat_unit" in summary.columns
+    assert "p_value_unit" in summary.columns
+    assert "elasticity_regime" in summary.columns
+
+    # 1. Unit_Elastic_Group (true theta = -1.0) must fail to reject H0: theta = -1.0 (p >= 0.05)
+    unit_row = summary.loc[summary["segment"] == "Unit_Elastic_Group"].iloc[0]
+    assert abs(unit_row["mean_elasticity"] - (-1.0)) < 0.25
+    assert unit_row["p_value_unit"] >= 0.05, f"Unit group p-value {unit_row['p_value_unit']} should be >= 0.05"
+    assert unit_row["elasticity_regime"] == "Unit Elastic"
+
+    # 2. Elastic_Group (true theta = -2.2) must reject H0 and have theta < -1.0
+    elastic_row = summary.loc[summary["segment"] == "Elastic_Group"].iloc[0]
+    assert elastic_row["mean_elasticity"] < -1.5
+    assert elastic_row["p_value_unit"] < 0.05
+    assert elastic_row["elasticity_regime"] in ["Elastic", "Highly Elastic"]
+
+    # 3. Inelastic_Group (true theta = -0.4) must reject H0 and have -1.0 < theta < 0.0
+    inelastic_row = summary.loc[summary["segment"] == "Inelastic_Group"].iloc[0]
+    assert inelastic_row["mean_elasticity"] > -0.7
+    assert inelastic_row["p_value_unit"] < 0.05
+    assert inelastic_row["elasticity_regime"] == "Inelastic"
+
+
+def test_subgroup_heterogeneity_vs_overall_ate():
+    """Test comparison of subgroup elasticities against overall catalog ATE."""
+    np.random.seed(42)
+    n = 400
+    group = np.random.choice(["High_Elasticity", "Average_Elasticity"], size=n)
+    g_num = (group == "High_Elasticity").astype(float)
+
+    # Treatment effect: average = -1.0, high elasticity = -2.5
+    theta_i = np.where(g_num == 1, -2.5, -1.0)
+    T = np.random.randn(n)
+    Y = theta_i * T + np.random.randn(n) * 0.4
+    X = pd.DataFrame({"is_high": g_num})
+
+    cate_est = CATEEstimator(
+        dml_base=DoubleMachineLearning(model_y=Ridge(), model_t=Ridge(), n_folds=3),
+        moderator_cols=["is_high"],
+        alpha=0.01,
+        random_state=42,
+    ).fit(X, T, Y)
+
+    summary = cate_est.cate_by_segment(group, X=X)
+    assert "t_stat_vs_overall" in summary.columns
+    assert "p_value_vs_overall" in summary.columns
+    assert "is_heterogeneous_vs_overall" in summary.columns
+
+    # High_Elasticity must be statistically significantly different from overall ATE
+    high_row = summary.loc[summary["segment"] == "High_Elasticity"].iloc[0]
+    assert high_row["is_heterogeneous_vs_overall"] is True or high_row["p_value_vs_overall"] < 0.10
+
+
+def test_flag_unsupported_extrapolations():
+    """Test detection of small sample size, high uncertainty, and out-of-support covariates."""
+    np.random.seed(42)
+    n = 200
+    X = pd.DataFrame({
+        "feature_1": np.random.uniform(0.0, 10.0, size=n),
+        "feature_2": np.random.randn(n),
+    })
+    T = np.random.randn(n)
+    Y = -1.2 * T + np.random.randn(n) * 0.5
+
+    cate_est = CATEEstimator(
+        dml_base=DoubleMachineLearning(model_y=Ridge(), model_t=Ridge(), n_folds=3),
+        alpha=0.1,
+    ).fit(X, T, Y)
+
+    # Segment labels with one very small group (N=5 < 20)
+    labels = ["Normal_Group"] * 195 + ["Sparse_Group"] * 5
+    summary = cate_est.cate_by_segment(labels, X=X, min_sample_size=20)
+
+    sparse_row = summary.loc[summary["segment"] == "Sparse_Group"].iloc[0]
+    assert bool(sparse_row["is_unsupported_extrapolation"]) is True
+    assert "Small sample size" in sparse_row["extrapolation_reasons"]
+
+    # Query observations that drastically exceed training support bounds [0, 10]
+    X_out_of_support = pd.DataFrame({
+        "feature_1": [100.0, -50.0],  # Out of [0, 10]
+        "feature_2": [0.0, 0.0],
+    })
+    support_check = cate_est.check_support_and_extrapolation(X_out_of_support)
+    assert bool(support_check["is_unsupported_extrapolation"].all()) is True
+    assert (support_check["bounds_violated_features"] > 0).all()
+
+
+def test_subgroup_stability_kfold(synthetic_heterogeneous_data):
+    """Test cross-fitting fold stability evaluation across segments."""
+    X_df, T, Y, _ = synthetic_heterogeneous_data
+    cate_est = CATEEstimator(
+        moderator_cols=["feat_0"],
+        alpha=0.1,
+        random_state=42,
+    )
+    labels = np.where(X_df["feat_0"] > 0, "High_Segment", "Low_Segment")
+    stab_df = cate_est.evaluate_subgroup_stability(
+        X=X_df,
+        T=T,
+        Y=Y,
+        segment_labels=labels,
+        n_splits=3,
+        random_state=42,
+    )
+
+    assert isinstance(stab_df, pd.DataFrame)
+    assert len(stab_df) == 2
+    for col in [
+        "segment",
+        "mean_across_folds",
+        "std_across_folds",
+        "cv_dispersion",
+        "negative_elasticity_pct",
+        "stability_rating",
+    ]:
+        assert col in stab_df.columns
+    # Both segments should preserve negative elasticity across folds
+    assert (stab_df["negative_elasticity_pct"] == 100.0).all()
+    assert (stab_df["stability_rating"].isin(["HIGHLY_STABLE", "MODERATELY_STABLE"])).all()
+
+
+def test_retail_customer_footfall_heterogeneity():
+    """Test customer footfall heterogeneity on retail dataset: high traffic vs low traffic."""
+    df = load_retail_price_dataset("data/raw/retail_price.csv")
+    splits = split_causal_data(
+        df=df,
+        test_size=0.2,
+        random_state=42,
+        treatment_col="unit_price",
+        outcome_col="qty",
+        categorical_confounders=["product_category_name"],
+        log_transform_treatment=True,
+        log_transform_outcome=True,
+    )
+
+    X_train = splits["X_train"]
+    T_train = splits["T_train"]
+    Y_train = splits["Y_train"]
+
+    cat_cols = [c for c in X_train.columns if "product_category_name_" in c]
+    mod_cols = cat_cols + ["customers"]
+
+    dml_base = DoubleMachineLearning(
+        n_folds=3,
+        random_state=42,
+    )
+    cate_est = CATEEstimator(
+        dml_base=dml_base,
+        moderator_cols=mod_cols,
+        alpha=1.0,
+        random_state=42,
+    ).fit(X_train, T_train, Y_train)
+
+    train_df = df.loc[X_train.index]
+    footfall_labels = np.where(train_df["customers"] > 100, "High_Footfall", "Low_Footfall")
+    summary = cate_est.cate_by_segment(footfall_labels, X=X_train)
+
+    high_e = summary.loc[summary["segment"] == "High_Footfall", "mean_elasticity"].iloc[0]
+    low_e = summary.loc[summary["segment"] == "Low_Footfall", "mean_elasticity"].iloc[0]
+
+    # High footfall (deal-seekers / high volume) is significantly more elastic (more negative)
+    assert high_e < low_e
+    assert high_e < -1.0  # High footfall is elastic
+
+
+def test_retail_category_unit_elasticity_and_extrapolation():
+    """Test category elasticities and extrapolation flags on retail dataset."""
+    df = load_retail_price_dataset("data/raw/retail_price.csv")
+    splits = split_causal_data(
+        df=df,
+        test_size=0.2,
+        random_state=42,
+        treatment_col="unit_price",
+        outcome_col="qty",
+        categorical_confounders=["product_category_name"],
+        log_transform_treatment=True,
+        log_transform_outcome=True,
+    )
+    X_train = splits["X_train"]
+    T_train = splits["T_train"]
+    Y_train = splits["Y_train"]
+
+    cat_cols = [c for c in X_train.columns if "product_category_name_" in c]
+    dml_base = DoubleMachineLearning(
+        n_folds=3,
+        random_state=42,
+    )
+    cate_est = CATEEstimator(
+        dml_base=dml_base,
+        moderator_cols=cat_cols,
+        alpha=1.0,
+        random_state=42,
+    ).fit(X_train, T_train, Y_train)
+
+    train_cats = df.loc[X_train.index, "product_category_name"]
+    summary = cate_est.cate_by_segment(train_cats, X=X_train, min_sample_size=20)
+
+    # 1. Computers & accessories should be the most price-sensitive (most negative elasticity)
+    comp_e = summary.loc[summary["segment"] == "computers_accessories", "mean_elasticity"].iloc[0]
+    assert comp_e < -1.4, f"computers_accessories elasticity {comp_e} should be highly elastic"
+
+    # 2. Sparse category (consoles_games with N=15 < 20) must be flagged as unsupported extrapolation
+    sparse_cat = summary.loc[summary["segment"] == "consoles_games"].iloc[0]
+    assert bool(sparse_cat["is_unsupported_extrapolation"]) is True
+    assert "Small sample size" in sparse_cat["extrapolation_reasons"]
+
