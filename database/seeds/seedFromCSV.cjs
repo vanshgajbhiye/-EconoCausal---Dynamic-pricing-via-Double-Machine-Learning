@@ -11,13 +11,11 @@
  *   - node_modules present in backend/ (mongoose installed)
  */
 
-const mongoose = require('mongoose');
-const fs       = require('fs');
-const path     = require('path');
+const fs   = require('fs');
+const path = require('path');
 
-// Resolve mongoose from backend's node_modules
-const mongoosePath = path.resolve(__dirname, '../../backend/node_modules/mongoose');
-const mg = require(mongoosePath);
+// Resolve mongoose from backend's node_modules (database/ has no node_modules)
+const mg = require(path.resolve(__dirname, '../../backend/node_modules/mongoose'));
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/econocausal';
 const CSV_PATH  = path.resolve(__dirname, '../../ml/data/raw/retail_price.csv');
