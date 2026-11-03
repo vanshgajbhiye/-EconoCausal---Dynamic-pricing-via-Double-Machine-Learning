@@ -75,3 +75,4 @@ SalesRecordSchema.index({ productId: 1, date: -1 });
 
 export const SalesRecord =
   mongoose.models.SalesRecord || mongoose.model('SalesRecord', SalesRecordSchema);
+

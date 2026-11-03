@@ -29,3 +29,4 @@ export const disconnectDB = async () => {
   isConnectedToMongo = false;
   console.log('[DB] MongoDB disconnected.');
 };
+

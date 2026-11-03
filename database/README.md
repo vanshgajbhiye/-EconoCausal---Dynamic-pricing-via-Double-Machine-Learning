@@ -58,3 +58,4 @@ SalesRecords : 676  (one record per product per month, 2017–2018)
 ## Re-seed Anytime
 
 Data lost or changed? Just re-run the seed script — it wipes and re-inserts cleanly.
+

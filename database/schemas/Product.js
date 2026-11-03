@@ -48,3 +48,4 @@ ProductSchema.pre('save', function (next) {
 
 export const Product =
   mongoose.models.Product || mongoose.model('Product', ProductSchema);
+

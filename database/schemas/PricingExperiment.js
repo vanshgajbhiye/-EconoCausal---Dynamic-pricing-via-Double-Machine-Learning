@@ -69,3 +69,4 @@ const PricingExperimentSchema = new mongoose.Schema(
 export const PricingExperiment =
   mongoose.models.PricingExperiment ||
   mongoose.model('PricingExperiment', PricingExperimentSchema);
+
