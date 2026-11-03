@@ -36,3 +36,4 @@ async function verify() {
 }
 
 verify().catch(e => { console.error('❌', e.message); process.exit(1); });
+
