@@ -4,7 +4,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.models.optimizer import DynamicPricingOptimizer, ItemOptimizationResult
+from src.models.optimizer import (
+    DynamicPricingOptimizer,
+    ItemOptimizationResult,
+    ProductConstraints,
+)
 
 
 class TestDynamicPricingOptimizerInit:
@@ -276,3 +280,433 @@ class TestCatalogAndPortfolioOptimization:
         assert isinstance(report, str)
         assert "ECONOCASUAL DYNAMIC PRICING OPTIMIZER" in report
         assert "STRATEGY SCENARIO COMPARISON" in report
+
+
+class TestProductConstraints:
+    """Test product-level business constraints and guardrail enforcement."""
+
+    def test_global_max_discount_limit(self):
+        # Base price 100, cost 40, theta = -4.0.
+        # Amoroso-Robinson would recommend 40 * (-4 / -3) = 53.33 (-46.7% discount).
+        # With max_discount_pct = 0.15, price floor is 100 * (1 - 0.15) = 85.0.
+        opt = DynamicPricingOptimizer(max_discount_pct=0.15)
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-4.0,
+            unit_cost=40.0,
+            objective="profit",
+        )
+        assert pytest.approx(p_opt, 1e-4) == 85.0
+        assert flag == "min_bound_clipped"
+
+    def test_product_level_max_discount_limit(self):
+        # Product constraints: max discount 10%
+        opt = DynamicPricingOptimizer(min_price_change_pct=-0.30)
+        constraints = ProductConstraints(max_discount_pct=0.10)
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-3.0,
+            unit_cost=50.0,
+            constraints=constraints,
+        )
+        # Amoroso-Robinson: 50 * (-3 / -2) = 75 (-25%), clipped to 90 (-10%)
+        assert pytest.approx(p_opt, 1e-4) == 90.0
+        assert flag == "min_bound_clipped"
+
+    def test_product_level_max_markup_limit(self):
+        # Inelastic good, would rise +20% (to 120), but product limit is +8% (108)
+        opt = DynamicPricingOptimizer(max_price_change_pct=0.25)
+        constraints = ProductConstraints(max_markup_pct=0.08)
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-0.7,
+            constraints=constraints,
+        )
+        assert pytest.approx(p_opt, 1e-4) == 108.0
+        assert flag == "inelastic_upper_bound"
+
+    def test_absolute_min_and_max_price_constraints(self):
+        opt = DynamicPricingOptimizer()
+        constraints = ProductConstraints(min_price=88.0, max_price=112.0)
+        # Elastic good clipped by absolute min_price
+        p_opt_el, flag_el = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-5.0,
+            unit_cost=40.0,
+            constraints=constraints,
+        )
+        assert pytest.approx(p_el := p_opt_el, 1e-4) == 88.0
+
+        # Inelastic good clipped by absolute max_price
+        p_opt_in, flag_in = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-0.5,
+            constraints=constraints,
+        )
+        assert pytest.approx(p_opt_in, 1e-4) == 112.0
+
+    def test_map_price_enforcement(self):
+        # Minimum Advertised Price ($92.00) prevents lower discounting
+        opt = DynamicPricingOptimizer(min_price_change_pct=-0.30)
+        constraints = ProductConstraints(map_price=92.0)
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-3.5,
+            unit_cost=45.0,
+            constraints=constraints,
+        )
+        assert pytest.approx(p_opt, 1e-4) == 92.0
+        assert flag == "min_bound_clipped"
+
+    def test_msrp_ceiling_enforcement(self):
+        # MSRP ($106.00) prevents pricing above recommended ceiling
+        opt = DynamicPricingOptimizer(max_price_change_pct=0.30)
+        constraints = ProductConstraints(msrp=106.0)
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-0.4,
+            constraints=constraints,
+        )
+        assert pytest.approx(p_opt, 1e-4) == 106.0
+
+    def test_price_freeze_enforcement(self):
+        opt = DynamicPricingOptimizer()
+        constraints = ProductConstraints(is_price_frozen=True)
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-2.5,
+            constraints=constraints,
+        )
+        assert p_opt == 100.0
+        assert flag == "price_frozen"
+
+    def test_allow_promotions_false(self):
+        opt = DynamicPricingOptimizer(min_price_change_pct=-0.25)
+        constraints = ProductConstraints(allow_promotions=False)
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-3.0,
+            unit_cost=50.0,
+            constraints=constraints,
+        )
+        # Cannot discount below base_price
+        assert p_opt >= 100.0
+
+    def test_product_specific_min_margin(self):
+        # High-margin brand: cost = 80, requires min_margin = 0.20 => P >= 80 / 0.8 = 100.0
+        opt = DynamicPricingOptimizer(min_margin=0.05)
+        constraints = ProductConstraints(min_margin=0.20)
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=110.0,
+            elasticity=-4.0,
+            unit_cost=80.0,
+            constraints=constraints,
+        )
+        assert p_opt >= 100.0
+
+    def test_product_constraints_from_dict(self):
+        raw_dict = {
+            "min_price": 50.0,
+            "max_price": 150.0,
+            "discount_limit": 0.12,
+            "stock": 42,
+            "map": 55.0,
+            "list_price": 140.0,
+            "price_freeze": True,
+        }
+        c = ProductConstraints.from_dict(raw_dict)
+        assert c.min_price == 50.0
+        assert c.max_price == 150.0
+        assert c.max_discount_pct == 0.12
+        assert c.inventory == 42.0
+        assert c.map_price == 55.0
+        assert c.msrp == 140.0
+        assert c.is_price_frozen is True
+
+
+class TestInventoryAndCapacityConstraints:
+    """Test stock limits, inventory-clearing market pricing, and portfolio budget bounds."""
+
+    def test_item_inventory_demand_capping(self):
+        opt = DynamicPricingOptimizer()
+        # Price dropped 10% (100 -> 90) on elastic good theta = -2.0
+        # Unconstrained demand would be 123.46. With inventory cap 110:
+        res = opt.simulate_item_uplift(
+            base_price=100.0,
+            base_qty=100.0,
+            new_price=90.0,
+            elasticity=-2.0,
+            unit_cost=50.0,
+            inventory=110.0,
+        )
+        assert res.projected_qty == 110.0
+        assert pytest.approx(res.stockout_units, 1e-2) == 13.46
+        # Financials are capped at units physically fulfilled
+        assert pytest.approx(res.projected_revenue, 1e-2) == 90.0 * 110.0
+        assert pytest.approx(res.projected_profit, 1e-2) == (90.0 - 50.0) * 110.0
+
+    def test_inventory_scarcity_market_clearing_price(self):
+        opt = DynamicPricingOptimizer(max_price_change_pct=0.50)
+        # Current sales = 100 units, but inventory stock is only 70 units
+        # theta = -1.5, cost = 25.0 (unconstrained price would be 75.0 producing 153.96 units > 70).
+        # Clearing price P_clear = 100 * (70/100)^(1 / -1.5) = 126.86
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-1.5,
+            unit_cost=25.0,
+            inventory=70.0,
+            base_qty=100.0,
+        )
+        assert p_opt > 100.0
+        assert flag == "inventory_clearing_bound"
+        assert pytest.approx(p_opt, 1e-2) == 126.86
+
+    def test_zero_inventory_condition(self):
+        opt = DynamicPricingOptimizer()
+        res = opt.simulate_item_uplift(
+            base_price=100.0,
+            base_qty=50.0,
+            new_price=105.0,
+            elasticity=-1.5,
+            inventory=0.0,
+        )
+        assert res.projected_qty == 0.0
+        assert res.projected_revenue == 0.0
+        assert res.projected_profit == 0.0
+
+    def test_portfolio_discount_budget_constraint(self):
+        # Catalog where both items would prefer -20% discount (to $80)
+        catalog = pd.DataFrame({
+            "product_id": ["SKU1", "SKU2"],
+            "product_category_name": ["catA", "catB"],
+            "unit_price": [100.0, 100.0],
+            "qty": [100.0, 100.0],
+            "elasticity": [-3.0, -3.0],
+            "unit_cost": [40.0, 40.0],
+        })
+        opt = DynamicPricingOptimizer(min_price_change_pct=-0.25)
+        # Without budget constraint: total discount spend is substantial (> $2,000)
+        res_unconstrained = opt.optimize_catalog(catalog)
+        unconstrained_spend = float(
+            ((catalog["unit_price"] - res_unconstrained["optimal_price"]) * res_unconstrained["projected_qty"]).sum()
+        )
+        assert unconstrained_spend > 1000.0
+
+        # With tight promotional budget of $400:
+        res_budget = opt.optimize_catalog(catalog, max_total_discount_budget=400.0)
+        budget_spend = float(
+            (np.maximum(0.0, catalog["unit_price"] - res_budget["optimal_price"]) * res_budget["projected_qty"]).sum()
+        )
+        assert budget_spend <= 401.0
+        assert any("budget_constrained" in str(b) for b in res_budget["bound_hit"])
+
+    def test_portfolio_inventory_capacity_constraint(self):
+        catalog = pd.DataFrame({
+            "product_id": ["SKU1", "SKU2"],
+            "product_category_name": ["catA", "catB"],
+            "unit_price": [100.0, 100.0],
+            "qty": [50.0, 50.0],
+            "elasticity": [-2.0, -2.0],
+            "unit_cost": [50.0, 50.0],
+        })
+        opt = DynamicPricingOptimizer(min_price_change_pct=-0.20)
+        # Total base volume = 100. With -20% price, volume would expand to ~156.
+        # Enforce max capacity limit of 105 units:
+        res = opt.optimize_catalog(catalog, max_total_inventory_capacity=105.0)
+        assert res["projected_qty"].sum() <= 106.0
+
+
+class TestFallbackMechanisms:
+    """Test graceful fallback to safe baseline prices under invalid or unreliable predictions."""
+
+    def test_fallback_nan_or_none_elasticity(self):
+        opt = DynamicPricingOptimizer()
+        p_opt, flag = opt.calculate_optimal_price(base_price=100.0, elasticity=np.nan)
+        assert p_opt == 100.0
+        assert flag == "fallback_nan_elasticity"
+
+        res = opt.simulate_item_uplift(
+            base_price=100.0,
+            base_qty=50.0,
+            new_price=p_opt,
+            elasticity=np.nan,
+            bound_hit=flag,
+        )
+        assert res.is_fallback is True
+        assert res.optimal_price == 100.0
+        assert res.price_change_pct == 0.0
+        assert res.demand_uplift_pct == 0.0
+        assert res.profit_uplift_pct == 0.0
+        assert res.projected_profit == res.baseline_profit
+
+    def test_fallback_infinite_elasticity(self):
+        opt = DynamicPricingOptimizer()
+        p_pos, flag_pos = opt.calculate_optimal_price(base_price=100.0, elasticity=float("inf"))
+        assert p_pos == 100.0
+        assert flag_pos == "fallback_nan_elasticity"
+
+        p_neg, flag_neg = opt.calculate_optimal_price(base_price=100.0, elasticity=float("-inf"))
+        assert p_neg == 100.0
+        assert flag_neg == "fallback_nan_elasticity"
+
+    def test_fallback_positive_elasticity(self):
+        # Positive elasticity implies upward-sloping demand curve (violating Law of Demand)
+        opt = DynamicPricingOptimizer()
+        p_opt, flag = opt.calculate_optimal_price(base_price=100.0, elasticity=1.5)
+        assert p_opt == 100.0
+        assert flag == "fallback_positive_elasticity"
+
+    def test_fallback_zero_elasticity(self):
+        opt = DynamicPricingOptimizer()
+        p_opt, flag = opt.calculate_optimal_price(base_price=100.0, elasticity=0.0)
+        assert p_opt == 100.0
+        assert flag == "fallback_zero_elasticity"
+
+    def test_fallback_unreliable_extreme_elasticity(self):
+        opt = DynamicPricingOptimizer(min_reliable_elasticity=-10.0, max_reliable_elasticity=-0.05)
+        # Extreme negative elasticity (overfitted or explosive)
+        p_opt1, flag1 = opt.calculate_optimal_price(base_price=100.0, elasticity=-15.0)
+        assert p_opt1 == 100.0
+        assert flag1 == "fallback_unreliable_elasticity"
+
+        # Near-zero elasticity below noise threshold
+        p_opt2, flag2 = opt.calculate_optimal_price(base_price=100.0, elasticity=-0.02)
+        assert p_opt2 == 100.0
+        assert flag2 == "fallback_unreliable_elasticity"
+
+    def test_fallback_insignificant_pvalue(self):
+        opt = DynamicPricingOptimizer(alpha_significance=0.05)
+        # Elasticity estimate is -2.0, but p-value is 0.25 (> 0.05)
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-2.0,
+            p_value=0.25,
+        )
+        assert p_opt == 100.0
+        assert flag == "fallback_insignificant_pvalue"
+
+    def test_fallback_high_standard_error(self):
+        opt = DynamicPricingOptimizer()
+        # Estimate = -1.2, but standard error = 2.0 (t-stat = 0.6 < 1.0)
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-1.2,
+            elasticity_se=2.0,
+        )
+        assert p_opt == 100.0
+        assert flag == "fallback_high_standard_error"
+
+    def test_fallback_confidence_interval_spanning_zero(self):
+        opt = DynamicPricingOptimizer()
+        # CI [-2.5, +0.5] spans zero, so effect direction is ambiguous
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=100.0,
+            elasticity=-1.5,
+            ci_lower=-2.5,
+            ci_upper=0.5,
+        )
+        assert p_opt == 100.0
+        assert flag == "fallback_ci_spans_zero"
+
+    def test_catalog_mixed_reliability(self):
+        mixed_df = pd.DataFrame({
+            "product_id": ["P1", "P2", "P3", "P4"],
+            "product_category_name": ["cat1", "cat1", "cat2", "cat2"],
+            "unit_price": [100.0, 100.0, 100.0, 100.0],
+            "qty": [50.0, 50.0, 50.0, 50.0],
+            "elasticity": [-2.0, np.nan, 0.5, -20.0],
+        })
+        opt = DynamicPricingOptimizer()
+        res = opt.optimize_catalog(mixed_df)
+
+        assert not res.at[0, "is_fallback"]
+        assert res.at[0, "optimal_price"] != 100.0
+
+        assert bool(res.at[1, "is_fallback"]) is True
+        assert res.at[1, "optimal_price"] == 100.0
+
+        assert bool(res.at[2, "is_fallback"]) is True
+        assert res.at[2, "optimal_price"] == 100.0
+
+        assert bool(res.at[3, "is_fallback"]) is True
+        assert res.at[3, "optimal_price"] == 100.0
+
+
+class TestBoundaryConditionsAndEdgeCases:
+    """Test microeconomic boundary conditions, margin floors, and numerical stability."""
+
+    def test_underwater_item_restores_margin(self):
+        # Selling price is 50, but cost is 65 (underwater margin).
+        # Margin floor (min_margin = 0.05) must push price to >= 65 / 0.95 = 68.42.
+        opt = DynamicPricingOptimizer(min_margin=0.05)
+        p_opt, flag = opt.calculate_optimal_price(
+            base_price=50.0,
+            elasticity=-2.0,
+            unit_cost=65.0,
+        )
+        assert p_opt >= 68.42
+
+    def test_zero_baseline_demand_safeguard(self):
+        opt = DynamicPricingOptimizer()
+        res = opt.simulate_item_uplift(
+            base_price=100.0,
+            base_qty=0.0,
+            new_price=110.0,
+            elasticity=-2.0,
+            unit_cost=50.0,
+        )
+        assert res.projected_qty == 0.0
+        assert res.demand_uplift_pct == 0.0
+        assert res.revenue_uplift_pct == 0.0
+        assert res.profit_uplift_pct == 0.0
+
+    def test_extreme_price_ratio_numerical_stability(self):
+        opt = DynamicPricingOptimizer()
+        res = opt.simulate_item_uplift(
+            base_price=1.0,
+            base_qty=100.0,
+            new_price=1000.0,
+            elasticity=-5.0,
+            unit_cost=0.5,
+        )
+        assert not np.isnan(res.projected_qty)
+        assert not np.isinf(res.projected_qty)
+        assert res.projected_qty >= 0.0
+
+    def test_optimize_single_item_convenience(self):
+        opt = DynamicPricingOptimizer()
+        res = opt.optimize_single_item(
+            base_price=100.0,
+            elasticity=-2.0,
+            base_qty=50.0,
+            unit_cost=60.0,
+        )
+        assert isinstance(res, ItemOptimizationResult)
+        assert pytest.approx(res.optimal_price, 1e-4) == 120.0
+        assert res.projected_profit > res.baseline_profit
+
+    def test_catalog_category_and_product_constraints(self):
+        catalog = pd.DataFrame({
+            "product_id": ["P1", "P2"],
+            "product_category_name": ["electronics", "luxury"],
+            "unit_price": [100.0, 200.0],
+            "qty": [50.0, 20.0],
+            "elasticity": [-2.0, -1.5],
+        })
+        opt = DynamicPricingOptimizer()
+        cat_constraints = {
+            "luxury": ProductConstraints(max_discount_pct=0.05),
+        }
+        prod_constraints = {
+            "P1": ProductConstraints(is_price_frozen=True),
+        }
+        res = opt.optimize_catalog(
+            catalog,
+            product_constraints=prod_constraints,
+            category_constraints=cat_constraints,
+        )
+        # P1 is price frozen
+        assert res.at[0, "optimal_price"] == 100.0
+        assert res.at[0, "bound_hit"] == "price_frozen"
+        # P2 in luxury cannot discount more than 5%
+        assert res.at[1, "optimal_price"] >= 200.0 * 0.95

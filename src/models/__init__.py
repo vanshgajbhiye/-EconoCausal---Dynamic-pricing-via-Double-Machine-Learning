@@ -1,7 +1,11 @@
 """Models module package for EconoCausal."""
 
 from src.models.cate import CATEEstimator
-from src.models.optimizer import DynamicPricingOptimizer, ItemOptimizationResult
+from src.models.optimizer import (
+    DynamicPricingOptimizer,
+    ItemOptimizationResult,
+    ProductConstraints,
+)
 from src.models.refutation import CausalRefuter
 from src.models.train_dml import DoubleMachineLearning, train_dml_pipeline
 
@@ -12,5 +16,6 @@ __all__ = [
     "CausalRefuter",
     "DynamicPricingOptimizer",
     "ItemOptimizationResult",
+    "ProductConstraints",
 ]
 
