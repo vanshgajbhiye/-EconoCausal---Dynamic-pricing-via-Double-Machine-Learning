@@ -187,13 +187,13 @@ async function seed() {
   // ── Seed SalesRecords ──
   console.log(`\n🗑   Clearing SalesRecords collection ...`);
   await SalesRecord.deleteMany({});
-  console.log(`📊  Inserting ${salesDocs.length} sales records ...`);
+  console.log(`  Inserting ${salesDocs.length} sales records ...`);
   const insertedSales = await SalesRecord.insertMany(salesDocs, { ordered: false });
-  console.log(`✅  SalesRecords → ${insertedSales.length} inserted`);
+  console.log(` SalesRecords → ${insertedSales.length} inserted`);
 
   // ── Summary ──
   console.log('\n═══════════════════════════════════════════════');
-  console.log('🎉  Seeding complete!');
+  console.log('  Seeding complete!');
   console.log(`    Products     : ${inserted.length}`);
   console.log(`    SalesRecords : ${insertedSales.length}`);
   console.log(`    Database     : econocausal @ localhost:27017`);
