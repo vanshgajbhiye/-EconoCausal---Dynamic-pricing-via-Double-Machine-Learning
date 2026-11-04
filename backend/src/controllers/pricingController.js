@@ -9,37 +9,55 @@ let memoryExperiments = [];
 
 const isDbConnected = () => isConnectedToMongo && mongoose.connection.readyState === 1;
 
-
 /**
- * Execute DML Causal Price Elasticity estimation
+ * POST /api/pricing/optimize
+ * Run DML on a product's historical sales data.
+ * Also called by the ML Python service for causal elasticity.
+ *
+ * Body: { productId?, title? }
+ * Returns: full DML result with elasticity, optimal price, demand curve
  */
 export const runDMLPricingAnalysis = async (req, res, next) => {
   try {
     const { productId, title = 'Causal DML Price Optimization' } = req.body;
 
-    let product = null;
+    let product       = null;
     let historicalData = [];
+    let resolvedProductId; // must be a real ObjectId for PricingExperiment
 
     if (isDbConnected()) {
       if (productId && mongoose.Types.ObjectId.isValid(productId)) {
-        product = await Product.findById(productId);
-        historicalData = await SalesRecord.find({ productId }).lean();
+        product           = await Product.findById(productId);
+        historicalData    = await SalesRecord.find({ productId }).lean();
+        resolvedProductId = product?._id;
+      }
+
+      // If no specific product given, pick the first one from DB
+      if (!resolvedProductId) {
+        const firstProduct = await Product.findOne({}).lean();
+        resolvedProductId  = firstProduct?._id;
+        if (!product && firstProduct) {
+          product = firstProduct;
+          historicalData = await SalesRecord.find({ productId: firstProduct._id }).lean();
+        }
       }
     }
 
-    // Default parameters if product not found in DB
-    const basePrice = product ? product.basePrice : 120;
-    const costPrice = product ? product.costPrice : 55;
-    const currentPrice = product ? product.currentPrice : 115;
-    const minPrice = product ? product.minPrice : costPrice * 1.08;
-    const maxPrice = product ? product.maxPrice : basePrice * 1.8;
+    // Pricing parameters — from DB product or sensible defaults
+    const basePrice    = product?.basePrice    ?? 120;
+    const costPrice    = product?.costPrice    ?? 55;
+    const currentPrice = product?.currentPrice ?? 115;
+    const minPrice     = product?.minPrice     ?? costPrice * 1.08;
+    const maxPrice     = product?.maxPrice     ?? basePrice * 1.8;
 
-    // If no real historical data yet, generate synthetic historical sample for DML fitting
+    // Need ≥10 real rows for meaningful regression; otherwise use synthetic
     if (!historicalData || historicalData.length < 10) {
-      historicalData = DMLSimulationService.generateSyntheticSales(productId || 'mock_prod', basePrice, 50);
+      historicalData = DMLSimulationService.generateSyntheticSales(
+        productId || 'mock_prod', basePrice, 50
+      );
     }
 
-    // Run Causal DML Estimation
+    // Run DML
     const analysis = DMLSimulationService.estimateCausalElasticity({
       historicalData,
       basePrice,
@@ -49,45 +67,44 @@ export const runDMLPricingAnalysis = async (req, res, next) => {
       maxPrice,
     });
 
+    // Build experiment payload — matches PricingExperiment schema exactly
     const experimentPayload = {
       title,
-      productId: productId || '650000000000000000000001',
-      status: 'completed',
-      methodology: analysis.methodology,
-      sampleSize: analysis.sampleSize,
-      causalTreatmentEffect: analysis.causalTreatmentEffect,
-      priceElasticity: analysis.priceElasticity,
-      confidenceInterval: analysis.confidenceInterval,
-      pVal: analysis.pValue,
-      currentPrice: analysis.currentPrice,
-      recommendedOptimalPrice: analysis.recommendedOptimalPrice,
-      projectedDemandAtOptimal: analysis.projectedDemandAtOptimal,
-      projectedRevenueAtOptimal: analysis.projectedRevenueAtOptimal,
+      productId:                    resolvedProductId,
+      status:                       'completed',
+      methodology:                  analysis.methodology,
+      sampleSize:                   analysis.sampleSize,
+      causalTreatmentEffect:        analysis.causalTreatmentEffect,
+      priceElasticity:              analysis.priceElasticity,
+      confidenceInterval:           analysis.confidenceInterval,
+      pVal:                         analysis.pValue,
+      currentPrice:                 analysis.currentPrice,
+      recommendedOptimalPrice:      analysis.recommendedOptimalPrice,
+      projectedDemandAtOptimal:     analysis.projectedDemandAtOptimal,
+      projectedRevenueAtOptimal:    analysis.projectedRevenueAtOptimal,
       projectedProfitLiftPercentage: analysis.projectedProfitLiftPercentage,
-      controlledConfounders: analysis.controlledConfounders,
-      priceDemandCurve: analysis.priceDemandCurve,
+      controlledConfounders:        analysis.controlledConfounders,
+      priceDemandCurve:             analysis.priceDemandCurve,
     };
 
-    if (isDbConnected() && productId && mongoose.Types.ObjectId.isValid(productId)) {
-      const savedExperiment = await PricingExperiment.create(experimentPayload);
+    // Persist to MongoDB if connected and we have a valid ObjectId
+    if (isDbConnected() && resolvedProductId) {
+      const saved = await PricingExperiment.create(experimentPayload);
       return res.status(200).json({
         success: true,
-        message: 'Causal DML analysis completed and saved',
-        data: savedExperiment,
+        message: 'DML analysis completed and saved to MongoDB',
+        data: saved,
       });
     }
 
-    const savedExperiment = {
-      _id: `exp_${Date.now()}`,
-      ...experimentPayload,
-      createdAt: new Date(),
-    };
-    memoryExperiments.unshift(savedExperiment);
+    // In-memory fallback
+    const saved = { _id: `exp_${Date.now()}`, ...experimentPayload, createdAt: new Date() };
+    memoryExperiments.unshift(saved);
 
     return res.status(200).json({
       success: true,
-      message: 'Causal DML analysis calculated successfully',
-      data: savedExperiment,
+      message: 'DML analysis completed (in-memory mode)',
+      data: saved,
     });
   } catch (err) {
     next(err);
@@ -95,31 +112,35 @@ export const runDMLPricingAnalysis = async (req, res, next) => {
 };
 
 /**
- * Simulate dynamic pricing scenarios for arbitrary custom inputs
+ * POST /api/pricing/simulate
+ * Simulate revenue/demand across custom price points.
+ * Used by the frontend BudgetPlanner and by the ML service.
+ *
+ * Body: { basePrice, costPrice, currentPrice, elasticity, minPrice, maxPrice, steps }
  */
 export const simulatePricingScenarios = async (req, res, next) => {
   try {
     const {
-      basePrice = 100,
-      costPrice = 40,
+      basePrice    = 100,
+      costPrice    = 40,
       currentPrice = 95,
-      elasticity = -1.75,
-      minPrice = 50,
-      maxPrice = 180,
-      steps = 15,
+      elasticity   = -1.75,
+      minPrice     = 50,
+      maxPrice     = 180,
+      steps        = 15,
     } = req.body;
 
     const curve = DMLSimulationService.generatePriceDemandCurve({
-      basePrice: Number(basePrice),
-      costPrice: Number(costPrice),
+      basePrice:    Number(basePrice),
+      costPrice:    Number(costPrice),
       currentPrice: Number(currentPrice),
-      elasticity: Number(elasticity),
-      minPrice: Number(minPrice),
-      maxPrice: Number(maxPrice),
-      steps: Number(steps),
+      elasticity:   Number(elasticity),
+      minPrice:     Number(minPrice),
+      maxPrice:     Number(maxPrice),
+      steps:        Number(steps),
     });
 
-    // Find price that maximizes profit
+    // Best profit point on the curve
     const optimalScenario = curve.reduce(
       (max, pt) => (pt.predictedProfit > max.predictedProfit ? pt : max),
       curve[0]
@@ -128,7 +149,7 @@ export const simulatePricingScenarios = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       data: {
-        parameters: { basePrice, costPrice, currentPrice, elasticity },
+        parameters:      { basePrice, costPrice, currentPrice, elasticity },
         optimalPricePoint: optimalScenario,
         simulationCurve: curve,
       },
@@ -139,7 +160,8 @@ export const simulatePricingScenarios = async (req, res, next) => {
 };
 
 /**
- * Get all past causal pricing experiments
+ * GET /api/pricing/experiments
+ * List all stored DML experiments.
  */
 export const getExperiments = async (req, res, next) => {
   try {
