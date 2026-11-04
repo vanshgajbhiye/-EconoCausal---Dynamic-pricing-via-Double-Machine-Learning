@@ -510,6 +510,7 @@ class EconoCausalPipeline:
             "optimal_price",
             "price_change_pct",
             "elasticity",
+            "unit_cost",
             "baseline_qty",
             "projected_qty",
             "demand_uplift_pct",
@@ -522,6 +523,10 @@ class EconoCausalPipeline:
             "baseline_margin",
             "projected_margin",
             "bound_hit",
+            "comp_1",
+            "comp_2",
+            "comp_3",
+            "comp_price",
         ]
         available_metrics = [c for c in metric_cols if c in optimized_df.columns]
         result_df = optimized_df[summary_cols + available_metrics].copy()
@@ -536,6 +541,7 @@ class EconoCausalPipeline:
             else:
                 actions.append("HOLD")
         result_df.insert(len(summary_cols) + 3, "pricing_action", actions)
+        result_df["action"] = actions
 
         # Optional Export
         if export_path is not None:
@@ -589,6 +595,10 @@ class EconoCausalPipeline:
             elasticity_col="elasticity",
             comp_col=valid_comp,
         )
+
+    # Backward and interface compatibility aliases
+    recommend_prices = batch_recommend
+    simulate_portfolio = simulate_scenarios
 
     def save(self, filepath: str) -> str:
         """Serialize and persist the fitted pipeline to disk using joblib.

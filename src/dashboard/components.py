@@ -254,7 +254,13 @@ def calculate_catalog_kpis(recommendations_df: pd.DataFrame) -> Dict[str, Any]:
     margin_expansion_bps = (avg_opt_margin - avg_base_margin) * 10000.0
 
     # Pricing Action Counts
-    action_counts = recommendations_df["action"].value_counts().to_dict()
+    action_col = "action" if "action" in recommendations_df.columns else (
+        "pricing_action" if "pricing_action" in recommendations_df.columns else None
+    )
+    if action_col is not None:
+        action_counts = recommendations_df[action_col].value_counts().to_dict()
+    else:
+        action_counts = {}
     total_items = len(recommendations_df)
 
     # Elasticity statistics
@@ -448,9 +454,13 @@ def build_scenario_waterfall_chart(scenario_df: pd.DataFrame) -> go.Figure:
     """Build a multi-strategy comparison bar chart comparing financial outcomes."""
     fig = go.Figure()
 
-    strategies = scenario_df["strategy"].tolist()
-    profits = scenario_df["total_profit"].tolist()
-    revenues = scenario_df["total_revenue"].tolist()
+    strat_col = "strategy" if "strategy" in scenario_df.columns else "Strategy"
+    prof_col = "total_profit" if "total_profit" in scenario_df.columns else "Total Profit ($)"
+    rev_col = "total_revenue" if "total_revenue" in scenario_df.columns else "Total Revenue ($)"
+
+    strategies = scenario_df[strat_col].tolist()
+    profits = scenario_df[prof_col].tolist()
+    revenues = scenario_df[rev_col].tolist()
 
     # Revenue Bar
     fig.add_trace(

@@ -137,6 +137,8 @@ def compute_cached_recommendations(
     _pipeline.optimizer.min_price_change_pct = min_discount
     _pipeline.optimizer.max_price_change_pct = max_markup
     _pipeline.optimizer.charm_pricing = charm_pricing
+    if hasattr(_pipeline, "batch_recommend"):
+        return _pipeline.batch_recommend(df, objective=objective)
     return _pipeline.recommend_prices(df, objective=objective)
 
 
@@ -146,7 +148,32 @@ def compute_cached_scenarios(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
     """Compute 6-strategy counterfactual scenario matrix."""
-    return _pipeline.simulate_portfolio(df)
+    if hasattr(_pipeline, "simulate_scenarios"):
+        scenarios = _pipeline.simulate_scenarios(df)
+    else:
+        scenarios = _pipeline.simulate_portfolio(df)
+
+    scenarios = scenarios.copy()
+    mapping = {
+        "Strategy": "strategy",
+        "Total Revenue ($)": "total_revenue",
+        "Total Profit ($)": "total_profit",
+        "Revenue Uplift (%)": "revenue_uplift_pct",
+        "Profit Uplift (%)": "profit_uplift_pct",
+        "Average Margin (%)": "average_margin",
+        "Total Units Sold": "total_units_sold",
+        "Units Uplift (%)": "units_uplift_pct",
+    }
+    for display_col, snake_col in mapping.items():
+        if display_col in scenarios.columns and snake_col not in scenarios.columns:
+            if "Uplift (%)" in display_col or "Margin (%)" in display_col:
+                scenarios[snake_col] = scenarios[display_col] / 100.0
+            else:
+                scenarios[snake_col] = scenarios[display_col]
+        elif snake_col in scenarios.columns and display_col not in scenarios.columns:
+            scenarios[display_col] = scenarios[snake_col]
+
+    return scenarios
 
 
 # --- Sidebar Setup ---
@@ -253,6 +280,31 @@ with st.spinner("Calculating optimal prices and causal counterfactual uplifts...
         max_markup=max_markup_val,
         charm_pricing=charm_toggle,
     )
+    # Ensure action column is present
+    if "action" not in recommendations_df.columns and "pricing_action" in recommendations_df.columns:
+        recommendations_df["action"] = recommendations_df["pricing_action"]
+    elif "action" not in recommendations_df.columns:
+        recommendations_df["action"] = recommendations_df["price_change_pct"].apply(
+            lambda d: "MARKUP" if d > 0.005 else ("DISCOUNT" if d < -0.005 else "HOLD")
+        )
+
+    # Ensure unit_cost is present
+    if "unit_cost" not in recommendations_df.columns:
+        if "baseline_margin" in recommendations_df.columns:
+            recommendations_df["unit_cost"] = recommendations_df["baseline_price"] * (1.0 - recommendations_df["baseline_margin"])
+        else:
+            recommendations_df["unit_cost"] = recommendations_df["baseline_price"] * 0.70
+
+    # Ensure margin columns are present
+    if "projected_margin" not in recommendations_df.columns:
+        recommendations_df["projected_margin"] = (
+            (recommendations_df["optimal_price"] - recommendations_df["unit_cost"]) / recommendations_df["optimal_price"]
+        )
+    if "baseline_margin" not in recommendations_df.columns:
+        recommendations_df["baseline_margin"] = (
+            (recommendations_df["baseline_price"] - recommendations_df["unit_cost"]) / recommendations_df["baseline_price"]
+        )
+
     scenarios_df = compute_cached_scenarios(_pipeline=pipeline, df=catalog_df)
     catalog_kpis = calculate_catalog_kpis(recommendations_df)
 

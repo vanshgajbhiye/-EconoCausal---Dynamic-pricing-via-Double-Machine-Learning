@@ -373,6 +373,8 @@ class DynamicPricingOptimizer:
         base_profs = []
         base_revs = []
         unit_costs = []
+        base_margins = []
+        proj_margins = []
 
         for _, row in out.iterrows():
             bp = float(row[price_col])
@@ -415,6 +417,8 @@ class DynamicPricingOptimizer:
             base_profs.append(res.baseline_profit)
             base_revs.append(res.baseline_revenue)
             unit_costs.append(res.unit_cost)
+            base_margins.append(res.baseline_margin)
+            proj_margins.append(res.projected_margin)
 
         out["optimal_price"] = opt_prices
         out["bound_hit"] = bounds
@@ -428,6 +432,8 @@ class DynamicPricingOptimizer:
         out["demand_uplift_pct"] = demand_uplifts
         out["revenue_uplift_pct"] = rev_uplifts
         out["profit_uplift_pct"] = prof_uplifts
+        out["baseline_margin"] = base_margins
+        out["projected_margin"] = proj_margins
 
         return out
 
