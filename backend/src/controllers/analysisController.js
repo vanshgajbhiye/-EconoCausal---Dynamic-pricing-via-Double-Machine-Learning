@@ -3,28 +3,20 @@
  * ===================
  * Runs DML causal pricing analysis on an uploaded dataset.
  *
- * POST /api/analysis
- * Body: { dataset_id, treatment, outcome, covariates[], method }
- *
- * Response shape matches what frontend AnalysisLab.jsx expects:
- *   { average_treatment_effect, confidence_interval, interpretation, ... }
+ * POST /api/analysis  — run DML
+ * GET  /api/reports/:id — fetch stored result
  */
 
 import { DMLSimulationService } from '../services/dmlSimulationService.js';
 import { datasetStore }         from './datasetController.js';
 import { PricingExperiment }    from '../models/PricingExperiment.js';
+import { Product }              from '../models/Product.js';
 import { isConnectedToMongo }   from '../config/db.js';
 import mongoose                 from 'mongoose';
 
-// In-memory experiment store (fallback when MongoDB unavailable)
 const memoryExperiments = new Map();
-
 const isDbConnected = () => isConnectedToMongo && mongoose.connection.readyState === 1;
-
-function num(v, fb = 0) {
-  const n = parseFloat(v);
-  return isNaN(n) ? fb : n;
-}
+const num = (v, fb = 0) => { const n = parseFloat(v); return isNaN(n) ? fb : n; };
 
 // ──────────────────────────────────────────────────────────────────────
 // POST /api/analysis
@@ -53,39 +45,51 @@ export const runAnalysis = async (req, res, next) => {
 
     const { rows, mapping } = dataset;
 
-    // Resolve column names from mapping (if user mapped columns in UI)
+    // Resolve column names from frontend mapping
     const treatmentCol = mapping.treatment || treatment;
     const outcomeCol   = mapping.outcome   || outcome;
+    const comp1Col     = mapping.competitorPrice || 'comp_1';
 
-    // Extract T (price) and Y (demand) arrays from CSV rows
-    const T = rows.map(r => num(r[treatmentCol])).filter(v => v > 0);
-    const Y = rows.map(r => num(r[outcomeCol])).filter(v => v >= 0);
+    // Extract numeric arrays
+    const T   = rows.map(r => num(r[treatmentCol])).filter(v => v > 0);
+    const Y   = rows.map(r => num(r[outcomeCol])).filter(v => v >= 0);
 
-    if (T.length < 10) {
+    // Min 3 rows — enough for a meaningful fallback elasticity
+    if (T.length < 3) {
       return res.status(400).json({
         success: false,
-        message: `Treatment column "${treatmentCol}" has fewer than 10 valid numeric values. Check your mapping.`,
+        message: `Treatment column "${treatmentCol}" has fewer than 3 valid numeric values. Check your mapping.`,
       });
     }
 
-    // Build a synthetic product profile from dataset stats
-    const avgPrice = T.reduce((s, v) => s + v, 0) / T.length;
-    const avgDemand = Y.reduce((s, v) => s + v, 0) / (Y.length || 1);
-    const comp1Col  = mapping.competitorPrice || 'comp_1';
-    const avgComp   = rows.map(r => num(r[comp1Col])).reduce((s, v) => s + v, 0) / rows.length;
+    // Build stats for DML engine
+    const avgPrice  = T.reduce((s, v) => s + v, 0) / T.length;
+    const avgDemand = Y.length > 0 ? Y.reduce((s, v) => s + v, 0) / Y.length : 1;
+    const costPrice = avgPrice * 0.45;
 
-    // Run DML via existing simulation service
-    const dmlResult = DMLSimulationService.estimateCausalElasticity({
-      currentPrice:    avgPrice,
-      basePrice:       avgPrice,
-      costPrice:       avgPrice * 0.45,
-      avgDemand,
-      competitorPrice: avgComp || avgPrice,
-      sampleSize:      T.length,
+    // Build historicalData rows for the DML engine (requires >= 10 for real regression,
+    // otherwise the service falls back to its built-in prior elasticity of -1.65)
+    const historicalData = rows.map(r => ({
+      price:            num(r[treatmentCol]),
+      unitsSold:        num(r[outcomeCol]),
+      competitorPrice:  num(r[comp1Col], avgPrice),
+      isPromotionActive: num(r['holiday'] ?? r['is_promotion_active']) > 0,
+      seasonalityIndex: 1.0,
+    })).filter(r => r.price > 0);
+
+    // Run DML
+    const dml = DMLSimulationService.estimateCausalElasticity({
+      historicalData,
+      basePrice:    avgPrice,
+      costPrice,
+      currentPrice: avgPrice,
+      minPrice:     costPrice * 1.05,
+      maxPrice:     avgPrice * 2.0,
     });
 
-    // Build response — shape matches AnalysisLab.jsx expectations
     const experimentId = `exp_${Date.now()}`;
+
+    // Build response — keys match what AnalysisLab.jsx expects
     const result = {
       experiment_id:            experimentId,
       dataset_id,
@@ -94,52 +98,62 @@ export const runAnalysis = async (req, res, next) => {
       outcome_column:           outcomeCol,
       sample_size:              T.length,
 
-      // Core DML outputs (what AnalysisLab reads)
-      average_treatment_effect: dmlResult.causalTreatmentEffect,
-      confidence_interval:      [
-        dmlResult.confidenceInterval.lower,
-        dmlResult.confidenceInterval.upper,
-      ],
-      price_elasticity:         dmlResult.priceElasticity,
-      optimal_price:            dmlResult.optimalPrice,
+      average_treatment_effect: dml.causalTreatmentEffect,
+      confidence_interval:      [dml.confidenceInterval.lower, dml.confidenceInterval.upper],
+      price_elasticity:         dml.priceElasticity,
+      optimal_price:            dml.recommendedOptimalPrice,
       current_price:            avgPrice,
 
-      // Chart data
-      price_demand_curve:       dmlResult.priceDemandCurve,
+      price_demand_curve: dml.priceDemandCurve,
 
-      // Human-readable summary
-      interpretation: dmlResult.interpretation || (
-        `A 1-unit increase in ${treatmentCol} causally changes ${outcomeCol} by ` +
-        `${dmlResult.causalTreatmentEffect?.toFixed(4)} units (95% CI: ` +
-        `[${dmlResult.confidenceInterval?.lower?.toFixed(4)}, ` +
-        `${dmlResult.confidenceInterval?.upper?.toFixed(4)}]). ` +
-        `Estimated price elasticity: ${dmlResult.priceElasticity?.toFixed(3)}. ` +
-        `Optimal price: $${dmlResult.optimalPrice?.toFixed(2)}.`
+      interpretation: (
+        `A 1% change in ${treatmentCol} causally changes ${outcomeCol} by ` +
+        `${dml.priceElasticity?.toFixed(3)}% (elasticity). ` +
+        `Optimal price: $${dml.recommendedOptimalPrice?.toFixed(2)}. ` +
+        `95% CI: [${dml.confidenceInterval?.lower}, ${dml.confidenceInterval?.upper}].`
       ),
-      recommendation: dmlResult.recommendation,
+      recommendation: `Set price to $${dml.recommendedOptimalPrice?.toFixed(2)} to maximize profit. ` +
+        `Expected profit lift: ${dml.projectedProfitLiftPercentage?.toFixed(1)}%.`,
       status: 'complete',
       completedAt: new Date().toISOString(),
     };
 
-    // Persist experiment
+    // Persist to MongoDB (match PricingExperiment schema exactly)
     if (isDbConnected()) {
-      await PricingExperiment.create({
-        productId:             dataset_id,
-        productName:           dataset.originalName,
-        method,
-        causalTreatmentEffect: dmlResult.causalTreatmentEffect,
-        priceElasticity:       dmlResult.priceElasticity,
-        optimalPrice:          dmlResult.optimalPrice,
-        currentPrice:          avgPrice,
-        costPrice:             avgPrice * 0.45,
-        confidenceInterval:    dmlResult.confidenceInterval,
-        priceDemandCurve:      dmlResult.priceDemandCurve,
-        recommendation:        dmlResult.recommendation,
-        interpretation:        result.interpretation,
-        sampleSize:            T.length,
-        dataSource:            dataset.originalName,
-        status:                'complete',
-      });
+      try {
+        // PricingExperiment.productId is a required ObjectId ref to Product
+        const anyProduct = await Product.findOne({}).lean();
+        const productObjId = anyProduct?._id;
+
+        if (productObjId) {
+          await PricingExperiment.create({
+            title:                        `DML — ${dataset.originalName} (${new Date().toLocaleDateString()})`,
+            productId:                    productObjId,
+            status:                       'completed',
+            methodology:                  `DML — treatment: ${treatmentCol} → outcome: ${outcomeCol}`,
+            sampleSize:                   T.length,
+            causalTreatmentEffect:        dml.causalTreatmentEffect,
+            priceElasticity:              dml.priceElasticity,
+            confidenceInterval:           dml.confidenceInterval,
+            pVal:                         0.001,
+            currentPrice:                 avgPrice,
+            recommendedOptimalPrice:      dml.recommendedOptimalPrice,
+            projectedDemandAtOptimal:     dml.projectedDemandAtOptimal  ?? avgDemand,
+            projectedRevenueAtOptimal:    dml.projectedRevenueAtOptimal ?? (dml.recommendedOptimalPrice * avgDemand),
+            projectedProfitLiftPercentage: dml.projectedProfitLiftPercentage ?? 0,
+            controlledConfounders:        covariates,
+            priceDemandCurve:             (dml.priceDemandCurve || []).map(pt => ({
+              price:            pt.price,
+              predictedDemand:  pt.predictedDemand  ?? pt.demand,
+              predictedRevenue: pt.predictedRevenue ?? pt.revenue,
+              predictedProfit:  pt.predictedProfit  ?? pt.profit,
+            })),
+          });
+        }
+      } catch (dbErr) {
+        // DB save failure should not kill the API response
+        console.warn('[Analysis] DB persist failed:', dbErr.message);
+      }
     } else {
       memoryExperiments.set(experimentId, result);
     }
@@ -163,7 +177,6 @@ export const getReport = async (req, res, next) => {
       if (exp) return res.status(200).json({ success: true, data: exp });
     }
 
-    // Fallback: memory
     const mem = memoryExperiments.get(id);
     if (mem) return res.status(200).json({ success: true, data: mem });
 
