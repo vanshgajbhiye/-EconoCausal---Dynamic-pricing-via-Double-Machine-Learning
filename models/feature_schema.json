@@ -1,0 +1,229 @@
+{
+  "treatment_col": "unit_price",
+  "outcome_col": "qty",
+  "raw_confounder_cols": [
+    "comp_1",
+    "comp_2",
+    "comp_3",
+    "fp1",
+    "fp2",
+    "fp3",
+    "product_score",
+    "customers",
+    "s",
+    "weekday",
+    "holiday",
+    "lag_price",
+    "freight_price",
+    "product_category_name"
+  ],
+  "raw_numerical_cols": [
+    "comp_1",
+    "comp_2",
+    "comp_3",
+    "fp1",
+    "fp2",
+    "fp3",
+    "product_score",
+    "customers",
+    "s",
+    "weekday",
+    "holiday",
+    "lag_price",
+    "freight_price"
+  ],
+  "raw_categorical_cols": [
+    "product_category_name"
+  ],
+  "encoded_feature_names": [
+    "comp_1",
+    "comp_2",
+    "comp_3",
+    "fp1",
+    "fp2",
+    "fp3",
+    "product_score",
+    "customers",
+    "s",
+    "weekday",
+    "holiday",
+    "lag_price",
+    "freight_price",
+    "product_category_name_bed_bath_table",
+    "product_category_name_computers_accessories",
+    "product_category_name_consoles_games",
+    "product_category_name_cool_stuff",
+    "product_category_name_furniture_decor",
+    "product_category_name_garden_tools",
+    "product_category_name_health_beauty",
+    "product_category_name_perfumery",
+    "product_category_name_watches_gifts"
+  ],
+  "column_dtypes": {
+    "unit_price": "float64",
+    "qty": "int64",
+    "comp_1": "float64",
+    "comp_2": "float64",
+    "comp_3": "float64",
+    "fp1": "float64",
+    "fp2": "float64",
+    "fp3": "float64",
+    "product_score": "float64",
+    "customers": "int64",
+    "s": "float64",
+    "weekday": "int64",
+    "holiday": "int64",
+    "lag_price": "float64",
+    "freight_price": "float64",
+    "product_category_name": "str"
+  },
+  "categorical_levels": {
+    "product_category_name": [
+      "bed_bath_table",
+      "computers_accessories",
+      "consoles_games",
+      "cool_stuff",
+      "furniture_decor",
+      "garden_tools",
+      "health_beauty",
+      "perfumery",
+      "watches_gifts"
+    ]
+  },
+  "imputation_values": {
+    "comp_1": 69.9953271,
+    "comp_2": 89.99,
+    "comp_3": 59.9,
+    "fp1": 16.77,
+    "fp2": 16.81176471,
+    "fp3": 16.50512821,
+    "product_score": 4.1,
+    "customers": 62.0,
+    "s": 11.33894879,
+    "weekday": 22.0,
+    "holiday": 1.0,
+    "lag_price": 89.99,
+    "freight_price": 17.587666665,
+    "product_category_name": "garden_tools"
+  },
+  "feature_statistics": {
+    "comp_1": {
+      "min": 19.9,
+      "max": 349.9,
+      "mean": 80.94694726003702,
+      "std": 47.17517618252046,
+      "p25": 49.99,
+      "median": 69.9953271,
+      "p75": 109.0
+    },
+    "comp_2": {
+      "min": 19.9,
+      "max": 349.9,
+      "mean": 93.518055465,
+      "std": 50.636205507221334,
+      "p25": 53.9,
+      "median": 89.99,
+      "p75": 117.9
+    },
+    "comp_3": {
+      "min": 19.9,
+      "max": 255.61,
+      "mean": 84.45047814025925,
+      "std": 46.80557162324357,
+      "p25": 53.78571429,
+      "median": 59.9,
+      "p75": 99.99
+    },
+    "fp1": {
+      "min": 0.095438596,
+      "max": 57.23,
+      "mean": 18.970191919012965,
+      "std": 9.787587179716597,
+      "p25": 13.8248214275,
+      "median": 16.77,
+      "p75": 19.89083333
+    },
+    "fp2": {
+      "min": 4.41,
+      "max": 57.23,
+      "mean": 18.70226785591296,
+      "std": 6.530786469799221,
+      "p25": 14.485,
+      "median": 16.81176471,
+      "p75": 21.6652381
+    },
+    "fp3": {
+      "min": 7.67,
+      "max": 57.23,
+      "mean": 18.029763097833335,
+      "std": 5.688794617914801,
+      "p25": 14.92666667,
+      "median": 16.50512821,
+      "p75": 19.44777778
+    },
+    "product_score": {
+      "min": 3.3,
+      "max": 4.5,
+      "mean": 4.0831481481481475,
+      "std": 0.2356715748323254,
+      "p25": 4.0,
+      "median": 4.1,
+      "p75": 4.2
+    },
+    "customers": {
+      "min": 1.0,
+      "max": 339.0,
+      "mean": 79.33518518518518,
+      "std": 59.447336127810765,
+      "p25": 34.0,
+      "median": 62.0,
+      "p75": 115.25
+    },
+    "s": {
+      "min": 0.484261501,
+      "max": 100.0,
+      "mean": 14.797982252483333,
+      "std": 12.239810495965529,
+      "p25": 7.5222582275,
+      "median": 11.33894879,
+      "p75": 17.829848594999998
+    },
+    "weekday": {
+      "min": 20.0,
+      "max": 23.0,
+      "mean": 21.757407407407406,
+      "std": 0.9795879357557636,
+      "p25": 21.0,
+      "median": 22.0,
+      "p75": 23.0
+    },
+    "holiday": {
+      "min": 0.0,
+      "max": 4.0,
+      "mean": 1.4796296296296296,
+      "std": 0.9305931297545831,
+      "p25": 1.0,
+      "median": 1.0,
+      "p75": 2.0
+    },
+    "lag_price": {
+      "min": 19.9,
+      "max": 364.0,
+      "mean": 109.14418475811112,
+      "std": 77.30867784659519,
+      "p25": 56.99,
+      "median": 89.99,
+      "p75": 129.99
+    },
+    "freight_price": {
+      "min": 0.0,
+      "max": 79.76,
+      "mean": 20.99602006554074,
+      "std": 10.366112240218854,
+      "p25": 14.7330681825,
+      "median": 17.587666665,
+      "p75": 23.270673079999998
+    }
+  },
+  "schema_version": "1.0.0"
+}

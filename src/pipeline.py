@@ -12,8 +12,10 @@ Supports:
 """
 
 import datetime
+import json
 import os
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+import uuid
 import joblib
 import numpy as np
 import pandas as pd
@@ -29,10 +31,24 @@ from src.data.preprocess import (
     CausalPreprocessor,
     split_causal_data,
 )
+from src.models.artifacts import (
+    EvaluationResults,
+    FeatureSchema,
+    ModelMetadata,
+    TrainingDataVersion,
+    extract_feature_schema,
+    extract_training_data_version,
+)
 from src.models.cate import CATEEstimator
 from src.models.optimizer import DynamicPricingOptimizer, ItemOptimizationResult
 from src.models.refutation import CausalRefuter
 from src.models.train_dml import DoubleMachineLearning
+from src.utils.reproducibility import (
+    get_dependency_versions,
+    get_git_info,
+    get_system_info,
+    set_seed,
+)
 
 
 class EconoCausalPipeline:
@@ -94,6 +110,7 @@ class EconoCausalPipeline:
         min_margin: float = 0.05,
         charm_pricing: bool = True,
         random_state: int = 42,
+        model_version: str = "1.0.0",
     ):
         self.treatment_col = treatment_col
         self.outcome_col = outcome_col
@@ -113,6 +130,7 @@ class EconoCausalPipeline:
         self.min_margin = min_margin
         self.charm_pricing = charm_pricing
         self.random_state = random_state
+        self.model_version = model_version
 
         # Internal component instances
         self.preprocessor: Optional[CausalPreprocessor] = None
@@ -134,6 +152,11 @@ class EconoCausalPipeline:
         self.raw_numerical_cols_: List[str] = []
         self.feature_imputation_values_: Dict[str, Any] = {}
         self.metadata_: Dict[str, Any] = {}
+        self.model_metadata_: Optional[ModelMetadata] = None
+        self.feature_schema_: Optional[FeatureSchema] = None
+        self.training_data_version_: Optional[TrainingDataVersion] = None
+        self.evaluation_results_: Optional[EvaluationResults] = None
+        self.benchmark_results_: Optional[Any] = None
 
     def fit(
         self,
@@ -161,6 +184,7 @@ class EconoCausalPipeline:
             Fitted pipeline instance ready for inference and optimization.
         """
         start_time = datetime.datetime.now(datetime.timezone.utc)
+        set_seed(self.random_state)
 
         # 1. Schema Validation
         validate_schema(
@@ -263,8 +287,92 @@ class EconoCausalPipeline:
         end_time = datetime.datetime.now(datetime.timezone.utc)
         self.is_fitted_ = True
 
-        # 9. Store Metadata
+        # 9. Build Structured Metadata, FeatureSchema, Data Provenance, and Evaluation Results
+        self.feature_schema_ = extract_feature_schema(
+            df=df_train,
+            treatment_col=self.treatment_col,
+            outcome_col=self.outcome_col,
+            raw_confounder_cols=self.raw_confounder_cols_,
+            raw_numerical_cols=self.raw_numerical_cols_,
+            raw_categorical_cols=self.raw_categorical_cols_,
+            encoded_feature_names=self.training_feature_names_,
+            imputation_values=self.feature_imputation_values_,
+        )
+
+        self.training_data_version_ = extract_training_data_version(
+            df=df,
+            train_idx=X_train.index.tolist(),
+            test_idx=splits["X_test"].index.tolist(),
+            test_size=test_size,
+            random_state=self.random_state,
+        )
+
+        ci_lower = (
+            self.baseline_ate_ - 1.96 * self.baseline_ate_se_
+            if (self.baseline_ate_ is not None and self.baseline_ate_se_ is not None)
+            else 0.0
+        )
+        ci_upper = (
+            self.baseline_ate_ + 1.96 * self.baseline_ate_se_
+            if (self.baseline_ate_ is not None and self.baseline_ate_se_ is not None)
+            else 0.0
+        )
+
+        cate_preds = self.cate_estimator.cate_predictions_
+        cate_summary = {
+            "mean": float(np.mean(cate_preds)),
+            "std": float(np.std(cate_preds)),
+            "min": float(np.min(cate_preds)),
+            "max": float(np.max(cate_preds)),
+            "median": float(np.median(cate_preds)),
+            "p25": float(np.percentile(cate_preds, 25)),
+            "p75": float(np.percentile(cate_preds, 75)),
+            "pct_elastic": float(np.mean(np.abs(cate_preds) > 1.0) * 100.0),
+        }
+
+        nuisance_scores = getattr(self.dml_estimator, "nuisance_scores_", {})
+
+        self.evaluation_results_ = EvaluationResults(
+            baseline_ate=float(self.baseline_ate_ if self.baseline_ate_ is not None else 0.0),
+            baseline_ate_se=float(self.baseline_ate_se_ or 0.0),
+            baseline_ate_pvalue=float(self.baseline_ate_pvalue_ or 0.0),
+            baseline_ate_ci=(ci_lower, ci_upper),
+            cate_summary=cate_summary,
+            nuisance_scores=nuisance_scores,
+            refutation_pass_rate=self.refutation_pass_rate_,
+            refutation_results=self.refutation_results_,
+            recorded_at=end_time.isoformat(),
+        )
+
+        model_id = f"ec-{uuid.uuid4().hex[:12]}"
+        self.model_metadata_ = ModelMetadata(
+            model_name="EconoCausalPipeline",
+            model_version=self.model_version,
+            model_id=model_id,
+            created_at=end_time.isoformat(),
+            training_duration_sec=(end_time - start_time).total_seconds(),
+            random_state=self.random_state,
+            algorithm="PartiallyLinearDML_CATE_AmorosoRobinson",
+            hyperparameters={
+                "n_splits": self.n_splits,
+                "cate_alpha": self.cate_alpha,
+                "default_margin": self.default_margin,
+                "min_price_change_pct": self.min_price_change_pct,
+                "max_price_change_pct": self.max_price_change_pct,
+                "min_margin": self.min_margin,
+                "charm_pricing": self.charm_pricing,
+                "log_transform_treatment": self.log_transform_treatment,
+                "log_transform_outcome": self.log_transform_outcome,
+            },
+            dependencies=get_dependency_versions(),
+            system_info=get_system_info(),
+            git_info=get_git_info(),
+        )
+
+        # Retain and enrich self.metadata_ for 100% backward compatibility
         self.metadata_ = {
+            "model_version": self.model_version,
+            "model_id": model_id,
             "trained_at": end_time.isoformat(),
             "training_duration_sec": (end_time - start_time).total_seconds(),
             "n_samples_total": len(df),
@@ -275,9 +383,11 @@ class EconoCausalPipeline:
             "baseline_ate_se": self.baseline_ate_se_,
             "baseline_ate_pvalue": self.baseline_ate_pvalue_,
             "refutation_pass_rate": self.refutation_pass_rate_,
-            "cate_mean_elasticity": float(np.mean(self.cate_estimator.cate_predictions_)),
-            "cate_min_elasticity": float(np.min(self.cate_estimator.cate_predictions_)),
-            "cate_max_elasticity": float(np.max(self.cate_estimator.cate_predictions_)),
+            "cate_mean_elasticity": cate_summary["mean"],
+            "cate_min_elasticity": cate_summary["min"],
+            "cate_max_elasticity": cate_summary["max"],
+            "training_data_sha256": self.training_data_version_.data_sha256,
+            "dependencies": self.model_metadata_.dependencies,
         }
 
         return self
@@ -600,13 +710,16 @@ class EconoCausalPipeline:
     recommend_prices = batch_recommend
     simulate_portfolio = simulate_scenarios
 
-    def save(self, filepath: str) -> str:
+    def save(self, filepath: str, save_companion_metadata: bool = True) -> str:
         """Serialize and persist the fitted pipeline to disk using joblib.
 
         Parameters
         ----------
         filepath : str
             Destination file path (e.g. 'models/econocausal_pipeline.joblib').
+        save_companion_metadata : bool, default=True
+            Whether to write companion JSON files (metadata.json, feature_schema.json,
+            training_data_version.json, evaluation_results.json) in the destination directory.
 
         Returns
         -------
@@ -624,31 +737,178 @@ class EconoCausalPipeline:
             except OSError:
                 pass
         joblib.dump(self, abs_path, compress=3)
+
+        if save_companion_metadata:
+            base_dir = os.path.dirname(abs_path)
+            if self.model_metadata_:
+                with open(os.path.join(base_dir, "metadata.json"), "w", encoding="utf-8") as f:
+                    json.dump(self.model_metadata_.to_dict(), f, indent=2)
+            if self.feature_schema_:
+                with open(os.path.join(base_dir, "feature_schema.json"), "w", encoding="utf-8") as f:
+                    json.dump(self.feature_schema_.to_dict(), f, indent=2)
+            if self.training_data_version_:
+                with open(os.path.join(base_dir, "training_data_version.json"), "w", encoding="utf-8") as f:
+                    json.dump(self.training_data_version_.to_dict(), f, indent=2)
+            if self.evaluation_results_:
+                with open(os.path.join(base_dir, "evaluation_results.json"), "w", encoding="utf-8") as f:
+                    json.dump(self.evaluation_results_.to_dict(), f, indent=2)
+
         return abs_path
+
+    def save_versioned(self, artifact_dir: str, version: Optional[str] = None) -> str:
+        """Serialize and persist the model into a versioned artifact bundle with manifest and checksums.
+
+        Parameters
+        ----------
+        artifact_dir : str
+            Destination directory for bundle.
+        version : Optional[str], default=None
+            Version string. If None, uses self.model_version.
+
+        Returns
+        -------
+        str
+            Absolute path to the created artifact directory.
+        """
+        if not self.is_fitted_:
+            raise ValueError("Cannot save an unfitted pipeline. Call 'fit' first.")
+        from src.models.artifacts import save_versioned_bundle
+
+        return save_versioned_bundle(self, artifact_dir, version=version or self.model_version)
+
+    @classmethod
+    def load_versioned(
+        cls, artifact_dir: str, verify_checksums: bool = True, strict_compatibility: bool = False
+    ) -> "EconoCausalPipeline":
+        """Deserialize and validate a versioned model bundle from disk.
+
+        Parameters
+        ----------
+        artifact_dir : str
+            Path to versioned artifact bundle directory.
+        verify_checksums : bool, default=True
+            Whether to verify cryptographic SHA-256 hashes against manifest.json.
+        strict_compatibility : bool, default=False
+            Whether to enforce strict dependency compatibility.
+
+        Returns
+        -------
+        EconoCausalPipeline
+            Restored pipeline instance.
+        """
+        from src.models.artifacts import load_versioned_bundle
+
+        return load_versioned_bundle(
+            artifact_dir,
+            verify_checksums=verify_checksums,
+            strict_compatibility=strict_compatibility,
+        )
 
     @classmethod
     def load(cls, filepath: str) -> "EconoCausalPipeline":
         """Deserialize and load a persisted EconoCausalPipeline from disk.
 
+        Supports both direct .joblib file paths and versioned bundle directories.
+
         Parameters
         ----------
         filepath : str
-            Path to serialized .joblib file.
+            Path to serialized .joblib file or bundle directory.
 
         Returns
         -------
         EconoCausalPipeline
             Fitted pipeline instance.
         """
-        if not os.path.exists(filepath):
+        abs_path = os.path.abspath(filepath)
+        if os.path.isdir(abs_path):
+            return cls.load_versioned(abs_path)
+
+        if not os.path.exists(abs_path):
             raise FileNotFoundError(f"Pipeline model file not found at: {filepath}")
 
-        loaded_obj = joblib.load(filepath)
+        loaded_obj = joblib.load(abs_path)
         if not isinstance(loaded_obj, cls):
             raise TypeError(
                 f"Loaded object is of type {type(loaded_obj).__name__}, expected {cls.__name__}"
             )
+
+        # Attempt to load companion metadata if present
+        base_dir = os.path.dirname(abs_path)
+        meta_p = os.path.join(base_dir, "metadata.json")
+        if os.path.exists(meta_p) and not getattr(loaded_obj, "model_metadata_", None):
+            try:
+                with open(meta_p, "r", encoding="utf-8") as f:
+                    loaded_obj.model_metadata_ = ModelMetadata.from_dict(json.load(f))
+            except Exception:
+                pass
+        schema_p = os.path.join(base_dir, "feature_schema.json")
+        if os.path.exists(schema_p) and not getattr(loaded_obj, "feature_schema_", None):
+            try:
+                with open(schema_p, "r", encoding="utf-8") as f:
+                    loaded_obj.feature_schema_ = FeatureSchema.from_dict(json.load(f))
+            except Exception:
+                pass
+        data_ver_p = os.path.join(base_dir, "training_data_version.json")
+        if os.path.exists(data_ver_p) and not getattr(loaded_obj, "training_data_version_", None):
+            try:
+                with open(data_ver_p, "r", encoding="utf-8") as f:
+                    loaded_obj.training_data_version_ = TrainingDataVersion.from_dict(json.load(f))
+            except Exception:
+                pass
+        eval_p = os.path.join(base_dir, "evaluation_results.json")
+        if os.path.exists(eval_p) and not getattr(loaded_obj, "evaluation_results_", None):
+            try:
+                with open(eval_p, "r", encoding="utf-8") as f:
+                    loaded_obj.evaluation_results_ = EvaluationResults.from_dict(json.load(f))
+            except Exception:
+                pass
+
         return loaded_obj
+
+    def benchmark_inference(
+        self,
+        df: pd.DataFrame,
+        batch_sizes: Sequence[int] = (1, 10, 50, 100),
+        n_single_runs: int = 100,
+        measure_memory: bool = True,
+    ) -> Any:
+        """Measure inference latency and memory use on representative batches.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Catalog or transaction dataset for batch benchmarking.
+        batch_sizes : Sequence[int], default=(1, 10, 50, 100)
+            Representative batch sizes.
+        n_single_runs : int, default=100
+            Number of single-SKU inference iterations.
+        measure_memory : bool, default=True
+            Whether to track memory peak and delta with tracemalloc.
+
+        Returns
+        -------
+        ModelBenchmarkSummary
+            Detailed performance benchmark results.
+        """
+        from src.models.benchmark import run_inference_benchmarks
+
+        summary = run_inference_benchmarks(
+            pipeline=self,
+            df=df,
+            batch_sizes=batch_sizes,
+            n_single_runs=n_single_runs,
+            measure_memory=measure_memory,
+        )
+        self.benchmark_results_ = summary
+        return summary
+
+    def check_version_compatibility(self) -> Dict[str, Any]:
+        """Verify current execution environment against model recorded dependencies."""
+        from src.models.artifacts import check_version_compatibility
+
+        meta = self.model_metadata_ if self.model_metadata_ is not None else self.metadata_
+        return check_version_compatibility(meta)
 
     def generate_executive_summary(self) -> str:
         """Generate a formatted ASCII executive summary of the trained pipeline."""

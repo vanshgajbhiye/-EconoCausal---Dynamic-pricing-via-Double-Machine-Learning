@@ -1,0 +1,28 @@
+{
+  "manifest_version": "1.0.0",
+  "model_version": "1.0.0",
+  "model_id": "ec-0f5b28d678d3",
+  "created_at": "2026-11-05T17:51:00.247978+00:00",
+  "files": {
+    "model.joblib": {
+      "sha256": "a05e6842080b70515878470e5f57f9adf6de8a848aff8e84a26d87ddc9618841",
+      "size_bytes": 2220725
+    },
+    "metadata.json": {
+      "sha256": "2ee7f82c4ec0bfbe7b6be5594ff2f123f2c01018491f93ccd186dd8336c9a6a1",
+      "size_bytes": 1559
+    },
+    "feature_schema.json": {
+      "sha256": "5e7764fb12b6e8e5b6b1f912330e3cadc02c7469434748319bbb75d48a06dae6",
+      "size_bytes": 5156
+    },
+    "training_data_version.json": {
+      "sha256": "e3b35028337c238d6651dad9cfbb0aa08887e6f85edd8d39c8d8b0e4cb540680",
+      "size_bytes": 1003
+    },
+    "evaluation_results.json": {
+      "sha256": "175b4542121d4d45f2675c12e7473c38b20cab7df3ecfb3c4daff5c658ebce73",
+      "size_bytes": 3051
+    }
+  }
+}

@@ -56,11 +56,15 @@ data/processed/
 # Model artifacts and binary checkpoints
 models/*
 !models/econocausal_pipeline.joblib
+!models/*.json
+!models/v1.0.0/
+!models/v1.0.0/*
 models/*.pkl
 models/*.onnx
 *.pkl
 *.joblib
 !models/econocausal_pipeline.joblib
+!models/v1.0.0/model.joblib
 
 # Logs and experiment outputs
 *.log

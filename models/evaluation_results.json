@@ -1,0 +1,84 @@
+{
+  "baseline_ate": -1.2678143803656436,
+  "baseline_ate_se": 0.5109854206270884,
+  "baseline_ate_pvalue": 0.013097154348895801,
+  "baseline_ate_ci": [
+    -2.269345804794737,
+    -0.2662829559365505
+  ],
+  "cate_summary": {
+    "mean": -1.2855296955721918,
+    "std": 0.9054815427050746,
+    "min": -4.59628900489043,
+    "max": 0.869266220617485,
+    "median": -1.2306551703229545,
+    "p25": -1.9150458823352585,
+    "p75": -0.5885953697978424,
+    "pct_elastic": 62.59259259259259
+  },
+  "nuisance_scores": {
+    "r2_y": 0.44569233781984774,
+    "rmse_y": 0.7829491568030215,
+    "mae_y": 0.6120255968119165,
+    "r2_t": 0.992040854599404,
+    "rmse_t": 0.05715360965664893,
+    "mae_t": 0.0320346405686143
+  },
+  "refutation_pass_rate": 100.0,
+  "refutation_results": {
+    "total_tests": 3,
+    "passed_tests": 3,
+    "robustness_score_percent": 100.0,
+    "is_causally_robust": true,
+    "results": {
+      "placebo_treatment": {
+        "test_name": "Placebo Treatment Refutation (permutation)",
+        "mode": "permutation",
+        "original_theta": -1.2678143803656436,
+        "placebo_theta_mean": 0.015985339972450337,
+        "placebo_theta_std": 0.01643578032706082,
+        "placebo_thetas": [
+          0.03242112029951116,
+          -0.0004504403546104812
+        ],
+        "placebo_p_value_mean": 0.7719859181883866,
+        "collapse_ratio": 0.012608580735476025,
+        "empirical_p_value": 0.3333333333333333,
+        "passed": true,
+        "detail": "Placebo effect (+0.0160) collapsed toward 0 (collapse ratio: 1.3%, p=0.772), confirming absence of spurious leakage."
+      },
+      "random_common_cause": {
+        "test_name": "Random Common Cause Refutation (gaussian)",
+        "noise_distribution": "gaussian",
+        "num_noise_vars": 1,
+        "original_theta": -1.2678143803656436,
+        "new_theta_mean": -1.6814441367209936,
+        "new_theta_std": 0.1685829306626898,
+        "thetas_with_noise": [
+          -1.8500270673836834,
+          -1.5128612060583038
+        ],
+        "relative_change": 0.3262541920653486,
+        "absolute_change": 0.41362975635534993,
+        "passed": true,
+        "detail": "Estimate remained stable (-1.6814 vs original -1.2678, relative shift: 32.6%) under gaussian noise injection."
+      },
+      "data_subset": {
+        "test_name": "Data Subset (80% Subsampling) Refutation",
+        "original_theta": -1.2678143803656436,
+        "subset_theta_mean": -0.9551892105197239,
+        "subset_theta_std": 0.171130109823946,
+        "subset_thetas": [
+          -1.1263193203436699,
+          -0.7840591006957779
+        ],
+        "subset_fraction": 0.8,
+        "sign_preserved": true,
+        "coefficient_of_variation": 0.1791583363160624,
+        "passed": true,
+        "detail": "Subsample elasticity (-0.9552) preserved original direction and remained consistent within tolerance (CV: 0.18, diff: 0.3126)."
+      }
+    }
+  },
+  "recorded_at": "2026-11-05T17:50:53.776230+00:00"
+}

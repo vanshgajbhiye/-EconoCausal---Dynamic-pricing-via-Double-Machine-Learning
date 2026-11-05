@@ -22,6 +22,7 @@ from typing import List, Optional
 import pandas as pd
 
 from src.data.load_data import load_retail_price_dataset
+from src.models.evaluator import ModelEvaluator
 from src.monitoring.drift import CausalDriftDetector
 from src.pipeline import EconoCausalPipeline
 
@@ -75,6 +76,24 @@ def create_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Optional destination path for formatted text audit report",
+    )
+    train_parser.add_argument(
+        "--version",
+        type=str,
+        default="1.0.0",
+        help="Semantic version string for model artifact",
+    )
+    train_parser.add_argument(
+        "--save-bundle",
+        type=str,
+        default=None,
+        help="Optional directory to save full versioned model bundle (manifest, schema, metadata)",
+    )
+    train_parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Deterministic random seed for reproducibility",
     )
 
     # 2. RECOMMEND SUBCOMMAND
@@ -245,6 +264,54 @@ def create_parser() -> argparse.ArgumentParser:
         help="PSI threshold for significant drift alert triggering retraining",
     )
 
+    # 6. EVALUATE SUBCOMMAND
+    eval_parser = subparsers.add_parser(
+        "evaluate",
+        help="Repeatable evaluation command: assess causal estimation, refutations, latency, and memory.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    eval_parser.add_argument(
+        "--model",
+        type=str,
+        default="models/econocausal_pipeline.joblib",
+        help="Path to trained pipeline .joblib model or versioned artifact bundle directory",
+    )
+    eval_parser.add_argument(
+        "--data",
+        type=str,
+        default="data/raw/retail_price.csv",
+        help="Path to evaluation dataset CSV",
+    )
+    eval_parser.add_argument(
+        "--output-report",
+        type=str,
+        default="experiments/results/model_evaluation_report.md",
+        help="Destination path for Markdown evaluation audit report",
+    )
+    eval_parser.add_argument(
+        "--output-json",
+        type=str,
+        default="experiments/results/model_evaluation_results.json",
+        help="Destination path for structured JSON evaluation results",
+    )
+    eval_parser.add_argument(
+        "--batches",
+        type=str,
+        default="1,10,50,100",
+        help="Comma-separated representative batch sizes for latency & memory benchmarking",
+    )
+    eval_parser.add_argument(
+        "--runs",
+        type=int,
+        default=50,
+        help="Number of single-item inference iterations for latency percentile calculation",
+    )
+    eval_parser.add_argument(
+        "--no-memory",
+        action="store_true",
+        help="Disable memory profiling with tracemalloc",
+    )
+
     return parser
 
 
@@ -258,10 +325,13 @@ def handle_train(args: argparse.Namespace) -> int:
     df = load_retail_price_dataset(args.data)
     print(f"[EconoCausal CLI] Loaded {len(df)} records with {len(df.columns)} columns.")
 
-    print(f"[EconoCausal CLI] Initializing EconoCausalPipeline (K={args.n_splits} folds)...")
+    seed = getattr(args, "seed", 42)
+    version = getattr(args, "version", "1.0.0")
+    print(f"[EconoCausal CLI] Initializing EconoCausalPipeline (K={args.n_splits} folds, seed={seed}, v{version})...")
     pipeline = EconoCausalPipeline(
         n_splits=args.n_splits,
-        random_state=42,
+        random_state=seed,
+        model_version=version,
     )
 
     run_refutations = not args.no_refutations
@@ -273,9 +343,13 @@ def handle_train(args: argparse.Namespace) -> int:
         refutation_repeats=2,
     )
 
-    # Serialize model
-    saved_path = pipeline.save(args.save_model)
+    # Serialize model (with companion metadata)
+    saved_path = pipeline.save(args.save_model, save_companion_metadata=True)
     print(f"[EconoCausal CLI] Model artifact persisted successfully to: {saved_path}")
+
+    if getattr(args, "save_bundle", None):
+        bundle_path = pipeline.save_versioned(args.save_bundle, version=version)
+        print(f"[EconoCausal CLI] Versioned artifact bundle persisted to: {bundle_path}")
 
     # Executive report
     summary_report = pipeline.generate_executive_summary()
@@ -459,6 +533,55 @@ def handle_audit_drift(args: argparse.Namespace) -> int:
     return 0
 
 
+def handle_evaluate(args: argparse.Namespace) -> int:
+    """Execute repeatable model evaluation, inference benchmarking, and reproducibility audit."""
+    print(f"\n[EconoCausal CLI] Loading pipeline model from: {args.model}")
+    if not os.path.exists(args.model):
+        print(f"Error: Model artifact not found at: {args.model}", file=sys.stderr)
+        return 1
+
+    pipeline = EconoCausalPipeline.load(args.model)
+    print(f"[EconoCausal CLI] Model loaded successfully (Fitted: {pipeline.is_fitted_}).")
+
+    print(f"[EconoCausal CLI] Loading evaluation dataset from: {args.data}")
+    if not os.path.exists(args.data):
+        print(f"Error: Evaluation data file not found at: {args.data}", file=sys.stderr)
+        return 1
+
+    df = load_retail_price_dataset(args.data)
+    print(f"[EconoCausal CLI] Loaded {len(df)} records for evaluation.")
+
+    batch_sizes = [int(b.strip()) for b in args.batches.split(",") if b.strip().isdigit()]
+    if not batch_sizes:
+        batch_sizes = [1, 10, 50, 100]
+
+    evaluator = ModelEvaluator(pipeline=pipeline, dataset_path=args.data)
+    print(f"[EconoCausal CLI] Running evaluation suite & benchmarks on batches {batch_sizes}...")
+    report = evaluator.evaluate(
+        df=df,
+        batch_sizes=batch_sizes,
+        n_single_runs=args.runs,
+        measure_memory=not args.no_memory,
+        run_refutations=False,
+    )
+
+    if args.output_json:
+        report.save_json(args.output_json)
+        print(f"[EconoCausal CLI] Structured evaluation results exported to: {args.output_json}")
+
+    if args.output_report:
+        report.save_markdown(args.output_report)
+        print(f"[EconoCausal CLI] Markdown audit report exported to: {args.output_report}")
+
+    # Print summary to console
+    print("\n" + report.render_markdown())
+
+    if report.overall_status == "FAILED":
+        print("\n[EconoCausal CLI] EVALUATION FAILED: Reproducibility or compatibility checks failed.", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Main CLI entry point."""
     parser = create_parser()
@@ -478,6 +601,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return handle_simulate(args)
     elif args.command == "audit-drift":
         return handle_audit_drift(args)
+    elif args.command == "evaluate":
+        return handle_evaluate(args)
     else:
         parser.print_help()
         return 1

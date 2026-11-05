@@ -1,0 +1,54 @@
+{
+  "model_name": "EconoCausalPipeline",
+  "model_version": "1.0.0",
+  "model_id": "ec-0f5b28d678d3",
+  "created_at": "2026-11-05T17:50:53.776230+00:00",
+  "training_duration_sec": 37.305657,
+  "random_state": 42,
+  "algorithm": "PartiallyLinearDML_CATE_AmorosoRobinson",
+  "hyperparameters": {
+    "n_splits": 5,
+    "cate_alpha": 1.0,
+    "default_margin": 0.3,
+    "min_price_change_pct": -0.3,
+    "max_price_change_pct": 0.2,
+    "min_margin": 0.05,
+    "charm_pricing": true,
+    "log_transform_treatment": true,
+    "log_transform_outcome": true
+  },
+  "dependencies": {
+    "python": "3.13.5",
+    "numpy": "2.4.4",
+    "pandas": "3.0.2",
+    "scipy": "1.17.1",
+    "scikit-learn": "1.8.0",
+    "joblib": "1.5.3",
+    "statsmodels": "not_installed",
+    "pydantic": "2.14.1",
+    "fastapi": "0.161.1",
+    "doubleml": "not_installed",
+    "econml": "not_installed",
+    "streamlit": "1.66.1",
+    "plotly": "7.1.0"
+  },
+  "system_info": {
+    "os_name": "nt",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "system": "Windows",
+    "release": "11",
+    "machine": "AMD64",
+    "processor": "Intel64 Family 6 Model 154 Stepping 3, GenuineIntel",
+    "cpu_count": 12,
+    "python_implementation": "CPython",
+    "python_version": "3.13.5",
+    "python_compiler": "MSC v.1943 64 bit (AMD64)"
+  },
+  "git_info": {
+    "commit_sha": "d0c743918cffaa2793f6c8fb968e5877031839a6",
+    "branch": "feature/rohit-model-training",
+    "is_dirty": true,
+    "available": true
+  },
+  "schema_version": "1.0.0"
+}

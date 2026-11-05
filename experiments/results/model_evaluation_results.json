@@ -1,0 +1,193 @@
+{
+  "timestamp": "2026-11-05T17:52:46.335083+00:00",
+  "model_version": "1.0.0",
+  "model_id": "ec-0f5b28d678d3",
+  "dataset_records": 676,
+  "dataset_path": "data/raw/retail_price.csv",
+  "ate_metrics": {
+    "baseline_ate": -1.2678143803656436,
+    "std_error": 0.5109854206270884,
+    "p_value": 0.013097154348895801,
+    "ci_lower": -2.269345804794737,
+    "ci_upper": -0.2662829559365505,
+    "statistically_significant": true
+  },
+  "cate_metrics": {
+    "mean_elasticity": -1.2723651764393447,
+    "median_elasticity": -1.2234449265214873,
+    "std_elasticity": 0.9020013503699885,
+    "min_elasticity": -4.59628900489043,
+    "max_elasticity": 0.913338714635573,
+    "pct_highly_elastic": 41.124260355029584,
+    "pct_elastic": 20.414201183431953,
+    "pct_inelastic": 38.46153846153847
+  },
+  "nuisance_metrics": {
+    "r2_y": 0.44569233781984774,
+    "rmse_y": 0.7829491568030215,
+    "mae_y": 0.6120255968119165,
+    "r2_t": 0.992040854599404,
+    "rmse_t": 0.05715360965664893,
+    "mae_t": 0.0320346405686143
+  },
+  "refutation_metrics": {
+    "pass_rate_pct": 100.0,
+    "placebo_status": "PASSED",
+    "common_cause_status": "PASSED",
+    "subsetting_status": "PASSED"
+  },
+  "simulation_metrics": {
+    "baseline_revenue": 961421.02615544,
+    "projected_revenue": 912188.9709048413,
+    "revenue_uplift_pct": -5.120759158707955,
+    "baseline_profit": 288426.30784663203,
+    "projected_profit": 342149.23823017644,
+    "profit_uplift_pct": 18.626224072497255,
+    "demand_uplift_pct": -18.27284279490086,
+    "baseline_margin_pct": 30.000000000000004,
+    "projected_margin_pct": 37.50859187551711,
+    "pct_markups": 82.10059171597634,
+    "pct_discounts": 9.319526627218936,
+    "pct_holds": 8.579881656804734
+  },
+  "performance_metrics": {
+    "timestamp": "2026-11-05T17:53:05.984506+00:00",
+    "model_version": "1.0.0",
+    "model_id": "ec-0f5b28d678d3",
+    "single_item": {
+      "iterations": 50,
+      "mean_ms": 133.818097999756,
+      "std_ms": 28.289538362326738,
+      "min_ms": 67.90560000081314,
+      "max_ms": 251.18959999963408,
+      "p50_ms": 126.55115000234218,
+      "p90_ms": 162.30145000008633,
+      "p95_ms": 169.1374900008668,
+      "p99_ms": 222.98490599863715,
+      "throughput_items_per_sec": 7.47283076764268,
+      "memory_peak_mb": 0.18657970428466797,
+      "memory_delta_mb": 0.1322946548461914
+    },
+    "batches": [
+      {
+        "batch_size": 1,
+        "iterations": 5,
+        "mean_batch_latency_ms": 202.6581599995552,
+        "mean_per_item_latency_ms": 202.6581599995552,
+        "throughput_items_per_sec": 4.934417642014488,
+        "memory_peak_mb": 0.10140514373779297,
+        "memory_delta_mb": 0.02832794189453125
+      },
+      {
+        "batch_size": 10,
+        "iterations": 5,
+        "mean_batch_latency_ms": 270.25765999933355,
+        "mean_per_item_latency_ms": 27.025765999933355,
+        "throughput_items_per_sec": 37.001726426642854,
+        "memory_peak_mb": 0.0994415283203125,
+        "memory_delta_mb": 0.018634796142578125
+      },
+      {
+        "batch_size": 50,
+        "iterations": 5,
+        "mean_batch_latency_ms": 278.45799999995506,
+        "mean_per_item_latency_ms": 5.569159999999101,
+        "throughput_items_per_sec": 179.5602927551303,
+        "memory_peak_mb": 0.13980579376220703,
+        "memory_delta_mb": 0.018128395080566406
+      },
+      {
+        "batch_size": 100,
+        "iterations": 3,
+        "mean_batch_latency_ms": 362.7943666651845,
+        "mean_per_item_latency_ms": 3.627943666651845,
+        "throughput_items_per_sec": 275.6382380443298,
+        "memory_peak_mb": 0.21457672119140625,
+        "memory_delta_mb": 0.012270927429199219
+      },
+      {
+        "batch_size": 500,
+        "iterations": 3,
+        "mean_batch_latency_ms": 1051.8507333338978,
+        "mean_per_item_latency_ms": 2.1037014666677956,
+        "throughput_items_per_sec": 475.35261815640223,
+        "memory_peak_mb": 0.9426069259643555,
+        "memory_delta_mb": 0.013678550720214844
+      },
+      {
+        "batch_size": 676,
+        "iterations": 3,
+        "mean_batch_latency_ms": 1371.4862333339017,
+        "mean_per_item_latency_ms": 2.028825788955476,
+        "throughput_items_per_sec": 492.8959427880901,
+        "memory_peak_mb": 1.2698640823364258,
+        "memory_delta_mb": 0.012975692749023438
+      }
+    ],
+    "reproducibility": {
+      "is_reproducible": true,
+      "max_elasticity_abs_diff": 0.0,
+      "max_optimal_price_abs_diff": 0.0,
+      "identical_actions": true,
+      "sample_size": 50
+    },
+    "system_info": {
+      "os_name": "nt",
+      "platform": "Windows-11-10.0.26300-SP0",
+      "system": "Windows",
+      "release": "11",
+      "machine": "AMD64",
+      "processor": "Intel64 Family 6 Model 154 Stepping 3, GenuineIntel",
+      "cpu_count": 12,
+      "python_implementation": "CPython",
+      "python_version": "3.13.5",
+      "python_compiler": "MSC v.1943 64 bit (AMD64)"
+    }
+  },
+  "reproducibility_metrics": {
+    "is_reproducible": true,
+    "max_elasticity_abs_diff": 0.0,
+    "max_optimal_price_abs_diff": 0.0,
+    "identical_actions": true,
+    "sample_size": 50
+  },
+  "compatibility_audit": {
+    "status": "COMPATIBLE",
+    "is_compatible": true,
+    "warnings": [],
+    "errors": [],
+    "model_version": "1.0.0",
+    "model_id": "ec-0f5b28d678d3",
+    "target_dependencies": {
+      "python": "3.13.5",
+      "numpy": "2.4.4",
+      "pandas": "3.0.2",
+      "scipy": "1.17.1",
+      "scikit-learn": "1.8.0",
+      "joblib": "1.5.3",
+      "statsmodels": "not_installed",
+      "pydantic": "2.14.1",
+      "fastapi": "0.161.1",
+      "doubleml": "not_installed",
+      "econml": "not_installed",
+      "streamlit": "1.66.1",
+      "plotly": "7.1.0"
+    },
+    "current_dependencies": {
+      "python": "3.13.5",
+      "numpy": "2.4.4",
+      "pandas": "3.0.2",
+      "scipy": "1.17.1",
+      "scikit-learn": "1.8.0",
+      "joblib": "1.5.3",
+      "statsmodels": "not_installed",
+      "pydantic": "2.14.1",
+      "fastapi": "0.161.1",
+      "doubleml": "not_installed",
+      "econml": "not_installed",
+      "streamlit": "1.66.1",
+      "plotly": "7.1.0"
+    }
+  },
+  "overall_status": "PASSED"
+}
