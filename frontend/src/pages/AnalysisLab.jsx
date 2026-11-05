@@ -19,7 +19,8 @@ export default function AnalysisLab({ dataset, onNotice, onNavigate, setAnalysis
     setStatus("loading");setError("");
     try{
       const response=await api.runAnalysis({dataset_id:dataset.id,treatment,outcome,covariates,method});
-      setResult(response);setAnalysis(response);setStatus("success");onNotice("Backend analysis completed.");
+      const data=response?.result||response?.data||response;
+      setResult(data);setAnalysis(data);setStatus("success");onNotice("Backend analysis completed.");
     }catch(e){setError(e.message);setStatus("error");}
   };
   const demo=()=>{setResult({demo:true,average_treatment_effect:0.084,confidence_interval:[0.041,0.127],message:"Illustrative UI values; not model-generated."});setStatus("demo");setError("");setAnalysis({demo:true,average_treatment_effect:0.084,confidence_interval:[0.041,0.127],treatment,outcome});};
@@ -30,5 +31,17 @@ export default function AnalysisLab({ dataset, onNotice, onNavigate, setAnalysis
     <p className="disclaimer">API contract is a frontend integration template. Match request fields and response parsing in <code>src/services/api.js</code> to the backend team's actual implementation.</p>
   </div>;
 }
-function formatEffect(v){const n=Number(v);return Number.isFinite(n)?`${(n*100).toFixed(2)}%`:String(v);}
-function formatCI(v){return Array.isArray(v)?`[${v.map(x=>`${(Number(x)*100).toFixed(2)}%`).join(", ")}]`:"Not provided";}
+function formatEffect(v){
+  const n=Number(v);
+  if(!Number.isFinite(n))return String(v);
+  if(Math.abs(n)<1)return `${n>0?"+":""}${(n*100).toFixed(1)}%`;
+  return `${n>0?"+":""}${n.toFixed(2)}`;
+}
+function formatCI(v){
+  if(!Array.isArray(v))return "Not provided";
+  return `[${v.map(x=>{
+    const n=Number(x);
+    if(!Number.isFinite(n))return String(x);
+    return Math.abs(n)<1?`${n>0?"+":""}${(n*100).toFixed(1)}%`:`${n>0?"+":""}${n.toFixed(2)}`;
+  }).join(", ")}]`;
+}

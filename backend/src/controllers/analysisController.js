@@ -158,7 +158,7 @@ export const runAnalysis = async (req, res, next) => {
       memoryExperiments.set(experimentId, result);
     }
 
-    return res.status(200).json({ success: true, result });
+    return res.status(200).json({ success: true, ...result, result });
   } catch (err) {
     next(err);
   }
