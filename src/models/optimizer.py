@@ -295,12 +295,15 @@ class DynamicPricingOptimizer:
             return False, "fallback_zero_elasticity"
 
         # Empirical plausibility boundaries
-        if val < self.min_reliable_elasticity or val > self.max_reliable_elasticity:
+        min_rel = getattr(self, "min_reliable_elasticity", -10.0)
+        max_rel = getattr(self, "max_reliable_elasticity", -0.05)
+        if val < min_rel or val > max_rel:
             return False, "fallback_unreliable_elasticity"
 
         # Statistical significance check
+        alpha_sig = getattr(self, "alpha_significance", 0.10)
         if p_value is not None and not np.isnan(p_value):
-            if float(p_value) > self.alpha_significance:
+            if float(p_value) > alpha_sig:
                 return False, "fallback_insignificant_pvalue"
 
         # Standard error / precision check (t-statistic < 1.0 indicates noise exceeds signal)
@@ -421,7 +424,8 @@ class DynamicPricingOptimizer:
         max_chg = c_obj.max_price_change_pct if c_obj.max_price_change_pct is not None else self.max_price_change_pct
 
         # Apply global or product-level discount limit
-        eff_max_discount = c_obj.max_discount_pct if c_obj.max_discount_pct is not None else self.max_discount_pct
+        global_max_disc = getattr(self, "max_discount_pct", None)
+        eff_max_discount = c_obj.max_discount_pct if c_obj.max_discount_pct is not None else global_max_disc
         if eff_max_discount is not None:
             # e.g. eff_max_discount = 0.15 => min_chg cannot be less than -0.15
             min_chg = max(min_chg, -float(eff_max_discount))
