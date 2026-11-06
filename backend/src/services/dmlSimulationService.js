@@ -9,12 +9,14 @@
  */
 
 export class DMLSimulationService {
+
   /**
    * Estimates causal price elasticity using DML methodology principles:
    * Outcome (Y): Demand / Units Sold
    * Treatment (T): Unit Price
    * Confounders (X): Competitor Price, Promotions, Seasonality, Inventory
    */
+
   static estimateCausalElasticity({
     historicalData = [],
     basePrice,
@@ -23,6 +25,7 @@ export class DMLSimulationService {
     minPrice,
     maxPrice,
   }) {
+    
     // If no custom data provided, use robust prior econometric elasticity
     let elasticity = -1.65; // Typical retail elasticity
     let standardError = 0.12;
@@ -162,6 +165,7 @@ export class DMLSimulationService {
   /**
    * Generates realistic synthetic sales history for testing & dev
    */
+
   static generateSyntheticSales(productId, basePrice, days = 60) {
     const records = [];
     const now = new Date();
