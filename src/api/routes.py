@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from src.api.metrics import export_metrics, record_recommendation
 from src.api.schemas import (
+    BackendPricingOptimizationRequest,
+    BackendPricingOptimizationResponse,
     BatchPricingRequest,
     BatchPricingResponse,
     DriftAuditRequest,
@@ -281,4 +283,48 @@ async def audit_production_drift(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Drift audit computation error: {str(exc)}",
+        ) from exc
+
+
+@router.post(
+    "/integration/pricing/optimize",
+    response_model=BackendPricingOptimizationResponse,
+    responses={
+        400: {"model": ErrorDetail, "description": "Invalid input parameters or unready model"},
+        422: {"description": "Pydantic validation error for missing or invalid fields"},
+        500: {"model": ErrorDetail, "description": "Internal optimization failure"},
+    },
+    tags=["Backend Integration"],
+    summary="Backend-Compatible Causal DML Pricing Optimization",
+    description=(
+        "Drop-in integration contract endpoint matching the Node.js/Express backend controller expectation. "
+        "Accepts camelCase fields (productId, basePrice, costPrice, currentPrice, competitorPrice, historicalData) "
+        "and returns treatment-effect estimates, recommended optimal price, expected demand/revenue, "
+        "uncertainty confidence intervals, controlled confounders, and full price-demand curve in the exact "
+        "schema required by Kris's PricingExperiment Mongoose model."
+    ),
+)
+async def optimize_pricing_for_backend(
+    request: BackendPricingOptimizationRequest,
+    service: CausalPricingService = Depends(get_service),
+) -> BackendPricingOptimizationResponse:
+    """Execute dynamic pricing optimization matching the Node.js backend contract."""
+    try:
+        response = service.optimize_for_backend(request)
+        record_recommendation(
+            product_category=request.category or "general",
+            action="MARKUP" if response.data.recommendedOptimalPrice > response.data.currentPrice else "DISCOUNT",
+            elasticity=response.data.priceElasticity,
+            profit_uplift_pct=response.data.projectedProfitLiftPercentage,
+        )
+        return response
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Backend pricing optimization error: {str(exc)}",
         ) from exc

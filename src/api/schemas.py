@@ -5,7 +5,24 @@ input validations, and OpenAPI documentation schema specifications.
 """
 
 from typing import Any, Dict, List, Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class ConfidenceIntervalSchema(BaseModel):
+    """Asymptotic confidence interval parameters for causal treatment effects."""
+
+    lower: float = Field(..., description="Lower bound of confidence interval.")
+    upper: float = Field(..., description="Upper bound of confidence interval.")
+    confidence_level: float = Field(default=0.95, description="Confidence level (e.g., 0.95 for 95% CI).")
+
+
+class PriceCurvePoint(BaseModel):
+    """Simulated microeconomic demand, revenue, and gross profit point on candidate price spectrum."""
+
+    price: float = Field(..., description="Candidate selling price ($).")
+    predicted_demand: float = Field(..., description="Simulated demand quantity at candidate price.")
+    predicted_revenue: float = Field(..., description="Projected total revenue at candidate price ($).")
+    predicted_profit: float = Field(..., description="Projected gross profit at candidate price ($).")
 
 
 class PricingItemInput(BaseModel):
@@ -16,58 +33,68 @@ class PricingItemInput(BaseModel):
     unit_price: float = Field(
         ...,
         gt=0.0,
+        validation_alias=AliasChoices("unit_price", "price", "basePrice", "currentPrice", "unitPrice"),
         description="Current selling unit price of the product (must be > 0).",
         examples=[59.90],
     )
     product_id: Optional[str] = Field(
         default=None,
+        validation_alias=AliasChoices("product_id", "productId", "sku", "id"),
         description="Unique SKU or product identifier.",
         examples=["bed_bath_table_item_01"],
     )
     product_category_name: Optional[str] = Field(
         default="health_beauty",
+        validation_alias=AliasChoices("product_category_name", "category", "productCategory"),
         description="Product category name used for CATE heterogeneity moderation.",
         examples=["health_beauty"],
     )
     qty: Optional[float] = Field(
         default=10.0,
         gt=0.0,
+        validation_alias=AliasChoices("qty", "unitsSold", "demand", "salesVolume", "quantity"),
         description="Baseline observed sales volume / demand quantity.",
         examples=[15.0],
     )
     unit_cost: Optional[float] = Field(
         default=None,
         gt=0.0,
+        validation_alias=AliasChoices("unit_cost", "cost", "costPrice", "marginalCost", "unitCost"),
         description="Direct marginal unit cost. If omitted, inferred from default margin (30%).",
         examples=[41.93],
     )
     comp_price: Optional[float] = Field(
         default=None,
         gt=0.0,
+        validation_alias=AliasChoices("comp_price", "competitorPrice", "compPrice", "comp_1"),
         description="Key competitor benchmark price.",
         examples=[58.50],
     )
     comp_1: Optional[float] = Field(
         default=None,
         gt=0.0,
+        validation_alias=AliasChoices("comp_1", "comp1"),
         description="Primary competitor price (comp_1).",
         examples=[58.50],
     )
     comp_2: Optional[float] = Field(
         default=None,
         gt=0.0,
+        validation_alias=AliasChoices("comp_2", "comp2"),
         description="Secondary competitor price (comp_2).",
         examples=[62.00],
     )
     comp_3: Optional[float] = Field(
         default=None,
         gt=0.0,
+        validation_alias=AliasChoices("comp_3", "comp3"),
         description="Tertiary competitor price (comp_3).",
         examples=[65.00],
     )
     freight_price: Optional[float] = Field(
         default=None,
         ge=0.0,
+        validation_alias=AliasChoices("freight_price", "freightPrice", "shippingPrice"),
         description="Shipping / freight price.",
         examples=[12.50],
     )
@@ -75,38 +102,89 @@ class PricingItemInput(BaseModel):
         default=None,
         ge=0.0,
         le=5.0,
+        validation_alias=AliasChoices("product_score", "productScore", "rating", "reviewScore"),
         description="Product review rating score (0 to 5).",
         examples=[4.2],
     )
     customers: Optional[float] = Field(
         default=None,
         ge=0.0,
+        validation_alias=AliasChoices("customers", "traffic", "visitorCount"),
         description="Number of potential customers or store traffic.",
         examples=[120.0],
     )
     weekday: Optional[float] = Field(
         default=None,
         ge=0.0,
+        validation_alias=AliasChoices("weekday", "dayOfWeek"),
         description="Weekday index or count.",
         examples=[22.0],
     )
     holiday: Optional[float] = Field(
         default=None,
         ge=0.0,
+        validation_alias=AliasChoices("holiday", "isHoliday"),
         description="Holiday count or indicator.",
         examples=[1.0],
     )
     s: Optional[float] = Field(
         default=None,
+        validation_alias=AliasChoices("s", "seasonalityIndex", "seasonality"),
         description="Seasonal demand index or factor.",
         examples=[15.0],
     )
     lag_price: Optional[float] = Field(
         default=None,
         gt=0.0,
+        validation_alias=AliasChoices("lag_price", "lagPrice", "previousPrice"),
         description="Previous period lagged price.",
         examples=[59.90],
     )
+    min_price: Optional[float] = Field(
+        default=None,
+        gt=0.0,
+        validation_alias=AliasChoices("min_price", "minPrice", "priceFloor"),
+        description="Minimum permissible price floor constraint.",
+        examples=[45.00],
+    )
+    max_price: Optional[float] = Field(
+        default=None,
+        gt=0.0,
+        validation_alias=AliasChoices("max_price", "maxPrice", "priceCeiling"),
+        description="Maximum permissible price ceiling constraint.",
+        examples=[90.00],
+    )
+    inventory: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        validation_alias=AliasChoices("inventory", "inventoryLevel", "stock"),
+        description="Current stock inventory count.",
+        examples=[100.0],
+    )
+    is_promotion_active: Optional[bool] = Field(
+        default=False,
+        validation_alias=AliasChoices("is_promotion_active", "isPromotionActive", "promotionalFlag"),
+        description="Whether active promotion or campaign applies.",
+        examples=[False],
+    )
+
+    @field_validator("product_score")
+    @classmethod
+    def validate_product_score(cls, v: Optional[float]) -> Optional[float]:
+        """Validate product score is strictly bounded in [0.0, 5.0]."""
+        if v is not None and not (0.0 <= v <= 5.0):
+            raise ValueError(f"product_score must be between 0.0 and 5.0, got {v}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_price_bounds(self) -> "PricingItemInput":
+        """Validate that min_price does not exceed max_price."""
+        if self.min_price is not None and self.max_price is not None:
+            if self.min_price > self.max_price:
+                raise ValueError(
+                    f"min_price ({self.min_price}) cannot exceed max_price ({self.max_price})"
+                )
+        return self
 
     def to_inference_dict(self) -> Dict[str, Any]:
         """Convert validated Pydantic model to a clean dictionary for the pipeline."""
@@ -132,7 +210,9 @@ class SingleItemPricingRequest(BaseModel):
 
 
 class SingleItemPricingResponse(BaseModel):
-    """Response payload containing optimal price, uplift simulation, and diagnostics."""
+    """Response payload containing optimal price, uplift simulation, uncertainty, and diagnostics."""
+
+    model_config = ConfigDict(populate_by_name=True)
 
     status: str = Field(default="SUCCESS", description="Execution status.")
     product_id: Optional[str] = Field(default=None, description="Product identifier if provided.")
@@ -148,23 +228,67 @@ class SingleItemPricingResponse(BaseModel):
         ...,
         description="Conditional Average Treatment Effect (CATE) price elasticity theta(X).",
     )
+    treatment_effect: Optional[float] = Field(
+        default=None,
+        description="Causal treatment effect point estimate (elasticity dQ/dP equivalent).",
+    )
+    confidence_interval: Optional[ConfidenceIntervalSchema] = Field(
+        default=None,
+        description="Asymptotic 95% confidence interval [lower, upper] for causal elasticity.",
+    )
+    std_error: Optional[float] = Field(
+        default=None,
+        description="Standard error of treatment effect estimate.",
+    )
+    p_value: Optional[float] = Field(
+        default=None,
+        description="P-value testing significance against null hypothesis.",
+    )
+    is_statistically_significant: Optional[bool] = Field(
+        default=True,
+        description="Whether treatment effect is statistically distinguishable from zero.",
+    )
+    elasticity_regime: Optional[str] = Field(
+        default="Elastic",
+        description="Microeconomic elasticity classification: 'Elastic', 'Inelastic', or 'Unit Elastic'.",
+    )
     unit_cost: float = Field(..., description="Marginal unit cost ($).")
     baseline_margin_pct: float = Field(..., description="Baseline gross margin percentage (%).")
     projected_margin_pct: float = Field(..., description="Projected gross margin percentage (%).")
     baseline_qty: float = Field(..., description="Baseline demand volume.")
     projected_qty: float = Field(..., description="Simulated demand volume under optimal price.")
+    expected_demand: Optional[float] = Field(
+        default=None,
+        description="Expected demand units under optimal price (alias for projected_qty).",
+    )
     demand_uplift_pct: float = Field(..., description="Projected demand uplift (%).")
     baseline_revenue: float = Field(..., description="Baseline total revenue ($).")
     projected_revenue: float = Field(..., description="Projected revenue ($).")
+    expected_revenue: Optional[float] = Field(
+        default=None,
+        description="Expected total revenue under optimal price (alias for projected_revenue).",
+    )
     revenue_uplift_pct: float = Field(..., description="Projected revenue uplift (%).")
     baseline_profit: float = Field(..., description="Baseline gross profit ($).")
     projected_profit: float = Field(..., description="Projected gross profit ($).")
+    expected_profit: Optional[float] = Field(
+        default=None,
+        description="Expected gross profit under optimal price (alias for projected_profit).",
+    )
     profit_uplift_pct: float = Field(..., description="Projected profit uplift (%).")
     bound_hit: Optional[str] = Field(
         default=None,
         description="Active guardrail: 'min_bound_clipped', 'max_bound_clipped', 'margin_floor_hit', or None.",
     )
     objective: str = Field(default="profit", description="Optimization objective used.")
+    controlled_confounders: Optional[List[str]] = Field(
+        default=None,
+        description="List of confounders controlled in Double Machine Learning model.",
+    )
+    price_demand_curve: Optional[List[PriceCurvePoint]] = Field(
+        default=None,
+        description="Multi-point simulated demand, revenue, and profit curve across price spectrum.",
+    )
     inference_latency_ms: Optional[float] = Field(
         default=None,
         description="Inference execution duration in milliseconds.",
@@ -223,6 +347,26 @@ class ElasticityResponseItem(BaseModel):
     elasticity_classification: str = Field(
         ...,
         description="'Highly Elastic' (|e| > 1.5), 'Elastic' (1.0 < |e| <= 1.5), or 'Inelastic' (|e| <= 1.0).",
+    )
+    std_error: Optional[float] = Field(
+        default=None,
+        description="Asymptotic standard error of elasticity estimate.",
+    )
+    confidence_interval: Optional[ConfidenceIntervalSchema] = Field(
+        default=None,
+        description="Asymptotic 95% confidence interval [lower, upper] for elasticity.",
+    )
+    p_value: Optional[float] = Field(
+        default=None,
+        description="P-value testing null hypothesis of unit elasticity.",
+    )
+    is_statistically_significant: Optional[bool] = Field(
+        default=None,
+        description="Whether elasticity is statistically significant.",
+    )
+    elasticity_regime: Optional[str] = Field(
+        default=None,
+        description="Regime classification ('Elastic', 'Inelastic', 'Unit Elastic').",
     )
 
 
@@ -289,11 +433,130 @@ class HealthResponse(BaseModel):
         default=None,
         description="Double Machine Learning Average Treatment Effect (ATE) price elasticity.",
     )
+    baseline_ate_ci: Optional[Dict[str, float]] = Field(
+        default=None,
+        description="95% confidence interval for baseline ATE price elasticity.",
+    )
+    baseline_ate_se: Optional[float] = Field(
+        default=None,
+        description="Standard error of baseline ATE price elasticity.",
+    )
+    baseline_ate_pvalue: Optional[float] = Field(
+        default=None,
+        description="P-value of baseline ATE price elasticity.",
+    )
     refutation_pass_rate: Optional[float] = Field(
         default=None,
         description="Causal refutation test battery pass rate (0% to 100%).",
     )
+    active_features: Optional[List[str]] = Field(
+        default=None,
+        description="List of active confounder features in causal pipeline.",
+    )
     timestamp: str = Field(..., description="ISO 8601 UTC timestamp.")
+
+
+class BackendPricingOptimizationRequest(BaseModel):
+    """Direct request payload matching Node.js Express backend controllers."""
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    productId: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("productId", "product_id"),
+        description="MongoDB ObjectId or SKU.",
+    )
+    title: Optional[str] = Field(
+        default="Causal DML Price Optimization",
+        description="Experiment title.",
+    )
+    basePrice: Optional[float] = Field(
+        default=120.0,
+        gt=0.0,
+        validation_alias=AliasChoices("basePrice", "base_price", "unit_price"),
+        description="Base catalog benchmark price.",
+    )
+    costPrice: Optional[float] = Field(
+        default=55.0,
+        gt=0.0,
+        validation_alias=AliasChoices("costPrice", "cost_price", "unit_cost"),
+        description="Cost price (Marginal Cost).",
+    )
+    currentPrice: Optional[float] = Field(
+        default=115.0,
+        gt=0.0,
+        validation_alias=AliasChoices("currentPrice", "current_price"),
+        description="Current live selling price.",
+    )
+    minPrice: Optional[float] = Field(
+        default=None,
+        gt=0.0,
+        validation_alias=AliasChoices("minPrice", "min_price"),
+        description="Lower guardrail price.",
+    )
+    maxPrice: Optional[float] = Field(
+        default=None,
+        gt=0.0,
+        validation_alias=AliasChoices("maxPrice", "max_price"),
+        description="Upper guardrail price.",
+    )
+    competitorPrice: Optional[float] = Field(
+        default=None,
+        gt=0.0,
+        validation_alias=AliasChoices("competitorPrice", "competitor_price", "comp_price"),
+        description="Competitor benchmark price.",
+    )
+    category: Optional[str] = Field(
+        default="health_beauty",
+        validation_alias=AliasChoices("category", "product_category_name"),
+        description="Product category.",
+    )
+    historicalData: Optional[List[Dict[str, Any]]] = Field(
+        default_factory=list,
+        validation_alias=AliasChoices("historicalData", "historical_data"),
+        description="Historical sales observation records.",
+    )
+
+    @model_validator(mode="after")
+    def validate_backend_bounds(self) -> "BackendPricingOptimizationRequest":
+        """Validate that minPrice does not exceed maxPrice."""
+        if self.minPrice is not None and self.maxPrice is not None:
+            if self.minPrice > self.maxPrice:
+                raise ValueError(
+                    f"minPrice ({self.minPrice}) cannot exceed maxPrice ({self.maxPrice})"
+                )
+        return self
+
+
+class BackendExperimentData(BaseModel):
+    """Data payload matching Node.js PricingExperiment Mongoose document."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    title: str
+    productId: str
+    status: str = "completed"
+    methodology: str = "Double Machine Learning (DML) - Orthogonal Residualization"
+    sampleSize: int
+    causalTreatmentEffect: float
+    priceElasticity: float
+    confidenceInterval: Dict[str, float]
+    pVal: float
+    currentPrice: float
+    recommendedOptimalPrice: float
+    projectedDemandAtOptimal: float
+    projectedRevenueAtOptimal: float
+    projectedProfitLiftPercentage: float
+    controlledConfounders: List[str]
+    priceDemandCurve: List[Dict[str, float]]
+
+
+class BackendPricingOptimizationResponse(BaseModel):
+    """Response payload directly consumable by Node.js backend pricingController."""
+
+    success: bool = True
+    message: str = "Causal DML analysis calculated successfully"
+    data: BackendExperimentData
 
 
 class ModelMetadataResponse(BaseModel):

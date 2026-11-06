@@ -1,0 +1,160 @@
+{
+  "valid_standard_request": {
+    "item": {
+      "product_id": "SKU_HEALTH_001",
+      "unit_price": 59.90,
+      "qty": 15.0,
+      "product_category_name": "health_beauty",
+      "unit_cost": 41.93,
+      "comp_price": 58.50,
+      "freight_price": 12.50,
+      "product_score": 4.2,
+      "customers": 120.0,
+      "weekday": 22.0,
+      "holiday": 1.0,
+      "s": 15.0,
+      "lag_price": 59.90
+    },
+    "objective": "profit"
+  },
+  "valid_backend_camelcase_request": {
+    "item": {
+      "productId": "650000000000000000000001",
+      "basePrice": 120.00,
+      "costPrice": 55.00,
+      "currentPrice": 115.00,
+      "competitorPrice": 118.00,
+      "category": "health_beauty",
+      "unitsSold": 25.0,
+      "freightPrice": 14.20,
+      "productScore": 4.5,
+      "inventoryLevel": 150.0,
+      "isPromotionActive": false,
+      "seasonalityIndex": 1.10
+    },
+    "objective": "profit"
+  },
+  "valid_batch_request": {
+    "items": [
+      {
+        "product_id": "SKU_HEALTH_001",
+        "unit_price": 59.90,
+        "qty": 15.0,
+        "product_category_name": "health_beauty",
+        "unit_cost": 40.00,
+        "comp_price": 58.50
+      },
+      {
+        "product_id": "SKU_BED_002",
+        "unit_price": 120.00,
+        "qty": 8.0,
+        "product_category_name": "bed_bath_table",
+        "unit_cost": 75.00,
+        "comp_price": 122.00
+      },
+      {
+        "product_id": "SKU_COMP_003",
+        "unit_price": 185.00,
+        "qty": 12.0,
+        "product_category_name": "computers_accessories",
+        "unit_cost": 120.00,
+        "comp_price": 190.00
+      }
+    ],
+    "objective": "profit"
+  },
+  "valid_backend_optimization_request": {
+    "productId": "650000000000000000000001",
+    "title": "Causal DML Price Optimization",
+    "basePrice": 120.00,
+    "costPrice": 55.00,
+    "currentPrice": 115.00,
+    "minPrice": 59.40,
+    "maxPrice": 216.00,
+    "competitorPrice": 118.00,
+    "category": "health_beauty",
+    "historicalData": [
+      {
+        "price": 115.00,
+        "unitsSold": 20,
+        "competitorPrice": 118.00,
+        "isPromotionActive": false,
+        "seasonalityIndex": 1.05
+      },
+      {
+        "price": 120.00,
+        "unitsSold": 18,
+        "competitorPrice": 119.00,
+        "isPromotionActive": true,
+        "seasonalityIndex": 1.10
+      }
+    ]
+  },
+  "missing_price_request": {
+    "item": {
+      "product_id": "SKU_INVALID_001",
+      "product_category_name": "health_beauty",
+      "qty": 10.0
+    },
+    "objective": "profit"
+  },
+  "invalid_negative_price_request": {
+    "item": {
+      "product_id": "SKU_INVALID_002",
+      "unit_price": -25.00,
+      "qty": 10.0
+    },
+    "objective": "profit"
+  },
+  "invalid_zero_price_request": {
+    "item": {
+      "product_id": "SKU_INVALID_003",
+      "unit_price": 0.00,
+      "qty": 10.0
+    },
+    "objective": "profit"
+  },
+  "invalid_negative_cost_request": {
+    "item": {
+      "product_id": "SKU_INVALID_004",
+      "unit_price": 50.00,
+      "unit_cost": -10.00
+    },
+    "objective": "profit"
+  },
+  "out_of_range_product_score_high": {
+    "item": {
+      "product_id": "SKU_INVALID_005",
+      "unit_price": 45.00,
+      "product_score": 6.8
+    },
+    "objective": "profit"
+  },
+  "out_of_range_product_score_low": {
+    "item": {
+      "product_id": "SKU_INVALID_006",
+      "unit_price": 45.00,
+      "product_score": -1.2
+    },
+    "objective": "profit"
+  },
+  "out_of_range_inverted_bounds": {
+    "item": {
+      "product_id": "SKU_INVALID_007",
+      "unit_price": 50.00,
+      "min_price": 80.00,
+      "max_price": 40.00
+    },
+    "objective": "profit"
+  },
+  "invalid_objective_request": {
+    "item": {
+      "product_id": "SKU_INVALID_008",
+      "unit_price": 50.00
+    },
+    "objective": "maximize_everything_and_more"
+  },
+  "empty_batch_request": {
+    "items": []
+  }
+}

@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             metadata = service.get_metadata()
             init_model_info(
                 version="1.0.0",
-                baseline_ate=metadata.ate_elasticity,
+                baseline_ate=metadata.baseline_ate,
                 refutation_pass_rate=metadata.refutation_pass_rate,
                 status="ready",
             )
