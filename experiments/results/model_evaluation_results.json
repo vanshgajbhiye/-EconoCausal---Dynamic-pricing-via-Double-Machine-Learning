@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-11-05T17:52:46.335083+00:00",
+  "timestamp": "2026-11-07T08:09:42.571622+00:00",
   "model_version": "1.0.0",
-  "model_id": "ec-0f5b28d678d3",
+  "model_id": "ec-946a1c0a28b8",
   "dataset_records": 676,
   "dataset_path": "data/raw/retail_price.csv",
   "ate_metrics": {
@@ -51,77 +51,68 @@
     "pct_holds": 8.579881656804734
   },
   "performance_metrics": {
-    "timestamp": "2026-11-05T17:53:05.984506+00:00",
+    "timestamp": "2026-11-07T08:10:00.121806+00:00",
     "model_version": "1.0.0",
-    "model_id": "ec-0f5b28d678d3",
+    "model_id": "ec-946a1c0a28b8",
     "single_item": {
       "iterations": 50,
-      "mean_ms": 133.818097999756,
-      "std_ms": 28.289538362326738,
-      "min_ms": 67.90560000081314,
-      "max_ms": 251.18959999963408,
-      "p50_ms": 126.55115000234218,
-      "p90_ms": 162.30145000008633,
-      "p95_ms": 169.1374900008668,
-      "p99_ms": 222.98490599863715,
-      "throughput_items_per_sec": 7.47283076764268,
-      "memory_peak_mb": 0.18657970428466797,
-      "memory_delta_mb": 0.1322946548461914
+      "mean_ms": 152.0944979984779,
+      "std_ms": 24.89808880573507,
+      "min_ms": 103.8981000019703,
+      "max_ms": 250.3253000031691,
+      "p50_ms": 145.27349999116268,
+      "p90_ms": 177.64311998325866,
+      "p95_ms": 191.99187999911368,
+      "p99_ms": 247.74476400518324,
+      "throughput_items_per_sec": 6.574859795454321,
+      "memory_peak_mb": 0.2062234878540039,
+      "memory_delta_mb": 0.15182113647460938
     },
     "batches": [
       {
         "batch_size": 1,
         "iterations": 5,
-        "mean_batch_latency_ms": 202.6581599995552,
-        "mean_per_item_latency_ms": 202.6581599995552,
-        "throughput_items_per_sec": 4.934417642014488,
-        "memory_peak_mb": 0.10140514373779297,
-        "memory_delta_mb": 0.02832794189453125
+        "mean_batch_latency_ms": 197.59946000413038,
+        "mean_per_item_latency_ms": 197.59946000413038,
+        "throughput_items_per_sec": 5.060742574798015,
+        "memory_peak_mb": 0.1048116683959961,
+        "memory_delta_mb": 0.03163909912109375
       },
       {
         "batch_size": 10,
         "iterations": 5,
-        "mean_batch_latency_ms": 270.25765999933355,
-        "mean_per_item_latency_ms": 27.025765999933355,
-        "throughput_items_per_sec": 37.001726426642854,
-        "memory_peak_mb": 0.0994415283203125,
-        "memory_delta_mb": 0.018634796142578125
+        "mean_batch_latency_ms": 213.3328000025358,
+        "mean_per_item_latency_ms": 21.33328000025358,
+        "throughput_items_per_sec": 46.87511718723579,
+        "memory_peak_mb": 0.09866905212402344,
+        "memory_delta_mb": 0.017862319946289062
       },
       {
         "batch_size": 50,
         "iterations": 5,
-        "mean_batch_latency_ms": 278.45799999995506,
-        "mean_per_item_latency_ms": 5.569159999999101,
-        "throughput_items_per_sec": 179.5602927551303,
-        "memory_peak_mb": 0.13980579376220703,
-        "memory_delta_mb": 0.018128395080566406
+        "mean_batch_latency_ms": 272.98370000207797,
+        "mean_per_item_latency_ms": 5.459674000041559,
+        "throughput_items_per_sec": 183.16111914234952,
+        "memory_peak_mb": 0.13870906829833984,
+        "memory_delta_mb": 0.01703166961669922
       },
       {
         "batch_size": 100,
         "iterations": 3,
-        "mean_batch_latency_ms": 362.7943666651845,
-        "mean_per_item_latency_ms": 3.627943666651845,
-        "throughput_items_per_sec": 275.6382380443298,
-        "memory_peak_mb": 0.21457672119140625,
-        "memory_delta_mb": 0.012270927429199219
-      },
-      {
-        "batch_size": 500,
-        "iterations": 3,
-        "mean_batch_latency_ms": 1051.8507333338978,
-        "mean_per_item_latency_ms": 2.1037014666677956,
-        "throughput_items_per_sec": 475.35261815640223,
-        "memory_peak_mb": 0.9426069259643555,
-        "memory_delta_mb": 0.013678550720214844
+        "mean_batch_latency_ms": 428.59686667604063,
+        "mean_per_item_latency_ms": 4.285968666760406,
+        "throughput_items_per_sec": 233.31948452060436,
+        "memory_peak_mb": 0.21420669555664062,
+        "memory_delta_mb": 0.012377738952636719
       },
       {
         "batch_size": 676,
         "iterations": 3,
-        "mean_batch_latency_ms": 1371.4862333339017,
-        "mean_per_item_latency_ms": 2.028825788955476,
-        "throughput_items_per_sec": 492.8959427880901,
-        "memory_peak_mb": 1.2698640823364258,
-        "memory_delta_mb": 0.012975692749023438
+        "mean_batch_latency_ms": 1383.3214333377935,
+        "mean_per_item_latency_ms": 2.0463334812689253,
+        "throughput_items_per_sec": 488.6789026097071,
+        "memory_peak_mb": 1.2714347839355469,
+        "memory_delta_mb": 0.014212608337402344
       }
     ],
     "reproducibility": {
@@ -157,7 +148,7 @@
     "warnings": [],
     "errors": [],
     "model_version": "1.0.0",
-    "model_id": "ec-0f5b28d678d3",
+    "model_id": "ec-946a1c0a28b8",
     "target_dependencies": {
       "python": "3.13.5",
       "numpy": "2.4.4",

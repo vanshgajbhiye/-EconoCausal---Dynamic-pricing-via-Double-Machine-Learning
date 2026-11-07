@@ -1,8 +1,8 @@
 # EconoCausal Model Evaluation & Reproducibility Audit
 
 **Evaluation Status:** [PASSED]  
-**Audit Timestamp:** `2026-11-05T17:52:46.335083+00:00`  
-**Model Version:** `1.0.0` (`ec-0f5b28d678d3`)  
+**Audit Timestamp:** `2026-11-07T08:09:42.571622+00:00`  
+**Model Version:** `1.0.0` (`ec-946a1c0a28b8`)  
 **Dataset Size:** `676` rows (Source: `data/raw/retail_price.csv`)  
 
 ---
@@ -47,20 +47,19 @@
 
 ## 5. Inference Latency & Memory Performance
 ### Single-SKU Real-Time Inference (`predict_item`)
-- **Median Latency (P50):** `126.55 ms`
-- **Tail Latency (P95 / P99):** `169.14 ms` / `222.98 ms`
-- **Throughput:** `7.5 items/sec`
-- **Peak Memory:** `0.187 MiB`
+- **Median Latency (P50):** `145.27 ms`
+- **Tail Latency (P95 / P99):** `191.99 ms` / `247.74 ms`
+- **Throughput:** `6.6 items/sec`
+- **Peak Memory:** `0.206 MiB`
 
 ### Representative Batch Scaling
 | Batch Size | Batch Latency (ms) | Per-Item Latency (ms) | Throughput (items/sec) | Peak Memory (MiB) |
 |:---:|:---:|:---:|:---:|:---:|
-| 1 | 202.66 | 202.658 | 4.9 | 0.101 |
-| 10 | 270.26 | 27.026 | 37.0 | 0.099 |
-| 50 | 278.46 | 5.569 | 179.6 | 0.140 |
-| 100 | 362.79 | 3.628 | 275.6 | 0.215 |
-| 500 | 1051.85 | 2.104 | 475.4 | 0.943 |
-| 676 | 1371.49 | 2.029 | 492.9 | 1.270 |
+| 1 | 197.60 | 197.599 | 5.1 | 0.105 |
+| 10 | 213.33 | 21.333 | 46.9 | 0.099 |
+| 50 | 272.98 | 5.460 | 183.2 | 0.139 |
+| 100 | 428.60 | 4.286 | 233.3 | 0.214 |
+| 676 | 1383.32 | 2.046 | 488.7 | 1.271 |
 
 ---
 

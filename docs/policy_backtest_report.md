@@ -1,21 +1,21 @@
 # Offline Pricing Policy Evaluation & Baseline Comparison Report
 
 **Milestone**: Day 17 — Offline pricing policy evaluation  
-**Evaluation Date**: 2026-11-05  
+**Evaluation Date**: 2026-11-07  
 **Author / Lead**: Rohit Sahu (Causal AI & Econometric Engineering)  
-**Holdout Partition**: 136 observations (random 80/20 split, strictly quarantined holdout, zero leakage)  
+**Holdout Partition**: 136 observations (random split, zero leakage)  
 **Bootstrap Resamples**: 500 iterations (vectorized empirical percentile CI)  
 
 ---
 
 ## 1. Executive Summary
 
-To test whether the proposed causal pricing policy improves on business alternatives prior to live deployment, we executed a rigorous offline backtest against three core benchmarks and two reference strategies:
+To test whether the proposed causal pricing policy improves on business alternatives prior to live deployment,
+we executed a rigorous offline backtest against three core benchmarks and two reference strategies:
 1. **Current Prices (Status Quo / Logging Policy)**: Factual historical prices charged to consumers.
 2. **Fixed-Discount Strategy (-10% Promotional Discount)**: Traditional retail clearance and volume-driving promotion.
 3. **Simple Non-Causal Baseline (Naive OLS Regression)**: Standard unadjusted predictive regression reflecting typical machine learning pricing mistakes.
 4. **Proposed Causal Policy (Double Machine Learning + CATE)**: Partially Linear DML Amoroso-Robinson profit optimizer with guardrails and charm pricing.
-5. **Additional Reference Strategies**: Competitor Benchmark (`comp_1`) and Fixed 10% Markup.
 
 ### Key Empirical Findings
 
@@ -58,8 +58,7 @@ $$w_i = \frac{K_h(P_{obs, i} - \pi(X_i))}{\hat{f}_0(P_{obs, i} \mid X_i)}$$
 - **Finding**: When policies recommend moderate adjustments, common support is satisfied ($ESS / N \ge 0.25$). For extreme markups or deep discounts, weight concentration increases, confirming why guarded Amoroso-Robinson bounds are essential.
 
 ### 3.3 Doubly Robust (DR) Estimator
-Combines Direct Method outcome predictions with propensity weight residuals:
-$$\hat{V}_{DR} = \frac{1}{N} \sum_{i=1}^N \hat{\mu}(X_i, \pi(X_i)) + \sum_{i=1}^N \tilde{w}_i \left(Y_{obs, i} - \hat{\mu}(X_i, P_{obs, i})\right)$$
+Combines Direct Method outcome predictions with propensity weight residuals: $\hat{V}_{DR} = \frac{1}{N} \sum \hat{\mu}(X_i, \pi(X_i)) + \sum \tilde{w}_i (Y_{obs, i} - \hat{\mu}(X_i, P_{obs, i}))$.
 Guarantees asymptotic unbiasedness if either the demand model or the logging propensity model is correctly specified.
 
 ### 3.4 Assumption Checklist

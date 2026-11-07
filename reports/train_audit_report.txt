@@ -1,0 +1,27 @@
+==============================================================================
+           ECONOCAUSAL END-TO-END PIPELINE EXECUTIVE AUDIT
+==============================================================================
+Training Timestamp:            2026-11-07T08:07:33.830738+00:00
+Training Samples:              540 (Total: 676)
+Encoded Confounder Dimension:  22 features
+------------------------------------------------------------------------------
+CAUSAL IDENTIFICATION & DOUBLE MACHINE LEARNING (DML):
+  - Baseline ATE Elasticity:   -1.2678
+  - Asymptotic Standard Error: 0.5110
+  - p-value:                   1.3097e-02
+  - 95% Confidence Interval:   [-2.2693, -0.2663]
+------------------------------------------------------------------------------
+HETEROGENEOUS TREATMENT EFFECTS (CATE):
+  - Mean CATE Elasticity:      -1.2855
+  - Min (Most Sensitive):      -4.5963
+  - Max (Least Sensitive):     0.8693
+------------------------------------------------------------------------------
+CAUSAL REFUTATION & MODEL AUDIT:
+  - Robustness Score:          100.0% (3/3 checks passed)
+------------------------------------------------------------------------------
+DYNAMIC PRICING OPTIMIZER GUARDRAILS:
+  - Pricing Bounds:            [-30.0%, +20.0%]
+  - Default Margin:            30.0%
+  - Minimum Margin Floor:      5.0%
+  - Charm Pricing (.99):       Enabled
+==============================================================================
