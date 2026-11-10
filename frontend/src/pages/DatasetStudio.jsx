@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Check, CheckCircle2, ChevronDown, CloudUpload, Database, FileSpreadsheet, Info, LoaderCircle, RefreshCw, Send, Trash2, Upload } from "lucide-react";
-import { api } from "../services/api.js";
-import Panel from "../components/Panel.jsx";
+import { api } from "../services/api";
+import Panel from "../components/Panel";
 
 function parseCSVLine(line) {
   const out=[]; let cur="", quoted=false;
@@ -32,12 +32,11 @@ export default function DatasetStudio({ dataset, setDataset, onNotice, onNavigat
       if(!lines.length){setError("The CSV file appears to be empty.");return;}
       const cols=parseCSVLine(lines[0]); setHeaders(cols);
       setPreview(lines.slice(1).map(parseCSVLine));
-      const t = cols.find(c => /^(unit_price|total_price|price|discount|treatment)$/i.test(c)) || cols.find(c => /price/i.test(c) && !/competitor|comp|freight/i.test(c));
-      const y = cols.find(c => /^(qty|units_sold|sales|quantity|volume|demand|revenue|conversion_rate|outcome)$/i.test(c)) || cols.find(c => /(qty|units|demand)/i.test(c));
-      const treatmentCol = t || cols[0] || "";
-      const outcomeCol = y || cols[Math.min(1, cols.length - 1)] || "";
-      setMapping({ treatment: treatmentCol, outcome: outcomeCol, covariates: [] });
-      setDataset({ file: f, name: f.name, size: f.size, headers: cols, preview: lines.slice(1).map(parseCSVLine), mapping: { treatment: treatmentCol, outcome: outcomeCol, covariates: [] }, backendStatus: "local" });
+      const lower=cols.map(c=>c.toLowerCase());
+      const t=lower.find(c=>["price","discount","promotion","treatment"].includes(c));
+      const y=lower.find(c=>["units_sold","sales","revenue","conversion_rate","outcome"].includes(c));
+      setMapping({treatment:cols[lower.indexOf(t)]||cols[0]||"",outcome:cols[lower.indexOf(y)]||cols[Math.min(1,cols.length-1)]||"",covariates:[]});
+      setDataset({file:f,name:f.name,size:f.size,headers:cols,preview:lines.slice(1).map(parseCSVLine),mapping:{treatment:cols[lower.indexOf(t)]||cols[0]||"",outcome:cols[lower.indexOf(y)]||cols[Math.min(1,cols.length-1)]||"",covariates:[]},backendStatus:"local"});
     }catch(e){setError("Could not read this CSV file. Please check the file encoding and format.");}
   };
   const changeMapping=(key,value)=>{const next={...mapping,[key]:value};setMapping(next);if(file)setDataset({...dataset,file,name:file.name,size:file.size,headers,preview,mapping:next,backendStatus});};

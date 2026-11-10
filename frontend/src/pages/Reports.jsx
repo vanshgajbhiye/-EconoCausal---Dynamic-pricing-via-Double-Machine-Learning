@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CheckCircle2, Download, FileBarChart, FileText, Info, RefreshCw } from "lucide-react";
-import Panel from "../components/Panel.jsx";
+import Panel from "../components/Panel";
 export default function Reports({ dataset, analysis, onNotice }) {
   const [downloading,setDownloading]=useState(false);
   const download=()=>{

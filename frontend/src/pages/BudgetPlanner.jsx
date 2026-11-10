@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowRight, CircleDollarSign, Info, SlidersHorizontal, TrendingUp, Wallet } from "lucide-react";
-import Panel from "../components/Panel.jsx";
+import Panel from "../components/Panel";
 export default function BudgetPlanner({ onNotice }) {
   const [budget,setBudget]=useState(50000);const [margin,setMargin]=useState(35);const [uplift,setUplift]=useState(12);
   const projected=Math.round(budget*margin/100*uplift/100);
