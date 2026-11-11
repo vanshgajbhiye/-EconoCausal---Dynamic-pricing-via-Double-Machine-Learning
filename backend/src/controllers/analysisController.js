@@ -146,7 +146,7 @@ export const runAnalysis = async (req, res, next) => {
       // Price Elasticity (% Δ Q / % Δ P)
       price_elasticity:         dml.priceElasticity,
       elasticity_units:         'Dimensionless ratio (% Δ Q / % Δ P)',
-      demand_nature:            Math.abs(dml.priceElasticity) > 1 ? 'Elastic Demand (|ε| > 1)' : 'Inelastic Demand (|ε| < 1)',
+      demand_nature:            dml.demandRegime || (Math.abs(dml.priceElasticity) > 1 ? 'Elastic Demand (|ε| > 1)' : 'Inelastic Demand (|ε| < 1)'),
 
       // Confidence Interval
       confidence_interval:      [dml.confidenceInterval.lower, dml.confidenceInterval.upper],
@@ -154,13 +154,15 @@ export const runAnalysis = async (req, res, next) => {
 
       // Optimal Pricing derivation
       optimal_price:            dml.recommendedOptimalPrice,
-      current_price:            avgPrice,
+      current_price:            Number(avgPrice.toFixed(2)),
+      mean_market_price:        dml.meanMarketPrice || Number(avgPrice.toFixed(2)),
+      demand_regime:            dml.demandRegime || (Math.abs(dml.priceElasticity) > 1 ? 'Elastic (|ε| > 1)' : 'Inelastic (|ε| < 1)'),
       optimal_price_validation: {
-        methodology:            'Amoroso-Robinson / Lerner Markup Rule',
-        formula:                'P* = MC * (ε / (1 + ε))',
+        methodology:            dml.pricingMethodology || 'Amoroso-Robinson / Lerner Markup Rule',
+        formula:                Math.abs(dml.priceElasticity) > 1 ? 'P* = MC × ε/(1+ε)' : 'P* = 0.5×(MC×(1+0.5/|ε|)) + 0.5×P̄  [cost-plus blend]',
         marginal_cost:          Number(costPrice.toFixed(2)),
         markup_factor:          Number((dml.priceElasticity / (1 + dml.priceElasticity)).toFixed(3)),
-        applied_bounds:         { min: Number((costPrice * 1.05).toFixed(2)), max: Number((avgPrice * 2.0).toFixed(2)) },
+        applied_bounds:         { min: Number((costPrice * 1.05).toFixed(2)), max: Number((priceCap).toFixed(2)) },
         projected_profit_lift:  `${dml.projectedProfitLiftPercentage?.toFixed(1)}%`,
       },
 

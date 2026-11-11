@@ -94,14 +94,30 @@ export class DMLSimulationService {
     const theta = causalTheta !== null ? causalTheta : elasticity * (meanQ / meanP);
     const displayTheta = Number(Math.abs(theta).toFixed(4)); // positive: "X units/$ decrease"
 
-    // ── 6. Optimal price via Lerner / Amoroso-Robinson markup rule ──
-    // P* = MC · ε / (1 + ε)   — valid when ε < -1
-    const effectiveElasticity = Math.min(elasticity, -1.05);
-    const markupFactor        = effectiveElasticity / (1 + effectiveElasticity);
-    let   recommendedOptimalPrice = (costPrice || meanP * 0.45) * markupFactor;
+    // ── 6. Optimal price — method depends on demand regime ──
+    const mc         = costPrice || meanP * 0.45;
+    const lowerBound = minPrice  || mc * 1.08;
+    const upperBound = maxPrice  || meanP * 2.0;
+    let   recommendedOptimalPrice;
+    let   pricingMethod;
 
-    const lowerBound = minPrice || (costPrice || meanP * 0.45) * 1.08;
-    const upperBound = maxPrice || meanP * 2.0;
+    if (Math.abs(elasticity) > 1.05) {
+      // ── Elastic demand: Amoroso-Robinson / Lerner markup rule ──
+      // P* = MC · ε / (1 + ε)   [valid for |ε| > 1]
+      const markupFactor = elasticity / (1 + elasticity);
+      recommendedOptimalPrice = mc * markupFactor;
+      pricingMethod = 'Lerner Markup Rule (elastic demand)';
+    } else {
+      // ── Inelastic demand: cost-plus markup ──
+      // With |ε| ≤ 1, Lerner gives nonsensical prices.
+      // Use inverse-elasticity markup: P* = MC × (1 + 1/|ε| × 0.5)
+      // then blend with average market price to stay grounded.
+      const invMarkup = 1 + 0.5 / Math.max(0.15, Math.abs(elasticity));
+      const lerner    = mc * invMarkup;
+      // Blend 50/50 with current market price to stay realistic
+      recommendedOptimalPrice = 0.5 * lerner + 0.5 * meanP;
+      pricingMethod = 'Cost-Plus Markup Rule (inelastic demand)';
+    }
     recommendedOptimalPrice = Math.max(lowerBound, Math.min(upperBound, recommendedOptimalPrice));
     recommendedOptimalPrice = Number(recommendedOptimalPrice.toFixed(2));
 
@@ -126,13 +142,16 @@ export class DMLSimulationService {
 
     return {
       methodology:               'Double Machine Learning (DML) — Orthogonal Residualization',
+      pricingMethodology:        pricingMethod,
+      demandRegime:              Math.abs(elasticity) > 1 ? 'Elastic (|ε| > 1)' : 'Inelastic (|ε| < 1)',
       sampleSize:                n,
       // θ displayed as positive magnitude: "demand falls by X units per $1 price increase"
       causalTreatmentEffect:     displayTheta,
       priceElasticity:           Number(elasticity.toFixed(3)),
       confidenceInterval:        confInterval,
       pValue:                    0.002,
-      currentPrice:              currentPrice || meanP,
+      currentPrice:              Number((currentPrice || meanP).toFixed(2)),
+      meanMarketPrice:           Number(meanP.toFixed(2)),
       recommendedOptimalPrice,
       projectedDemandAtOptimal:  optPt.predictedDemand,
       projectedRevenueAtOptimal: optPt.predictedRevenue,

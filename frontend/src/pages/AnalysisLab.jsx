@@ -43,11 +43,11 @@ export default function AnalysisLab({ dataset, onNotice, onNavigate, setAnalysis
 function formatEffect(v, res){
   const n=Number(v);
   if(!Number.isFinite(n))return String(v);
-  if(res?.demo||(n>0&&n<1))return `+${(n*100).toFixed(1)}%`;
-  // ATE is now positive magnitude — "X units per $1 price change"
-  // Use enough decimal places so it never rounds to 0.000
+  // Only show % for explicit demo mode — never for real backend results
+  if(res?.demo) return `+${(n*100).toFixed(1)}%`;
+  // Real ATE: always show as absolute units-per-dollar
   const abs = Math.abs(n);
-  if(abs === 0) return "0 units / $1";
+  if(abs === 0)   return "0 units / $1";
   if(abs < 0.001) return `${abs.toExponential(2)} units / $1`;
   if(abs < 0.1)   return `${abs.toFixed(4)} units / $1`;
   return `${abs.toFixed(3)} units / $1`;
