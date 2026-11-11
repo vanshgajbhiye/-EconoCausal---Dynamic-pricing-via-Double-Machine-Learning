@@ -88,14 +88,33 @@ export const runAnalysis = async (req, res, next) => {
     const avgDemand = Y.length > 0 ? Y.reduce((s, v) => s + v, 0) / Y.length : 1;
     const costPrice = avgPrice * 0.45;
 
-    // Build historicalData rows for the DML engine
-    const historicalData = rows.map(r => ({
-      price:            num(r[actualTreatmentCol], avgPrice),
-      unitsSold:        num(r[actualOutcomeCol], avgDemand),
-      competitorPrice:  num(r[comp1Col], avgPrice),
-      isPromotionActive: num(r['holiday'] ?? r['is_promotion_active']) > 0,
-      seasonalityIndex: 1.0,
-    })).filter(r => r.price > 0);
+    // Build historicalData rows for the DML engine — include all confounders from CSV
+    const comp2Col = mapping.comp2 || 'comp_2';
+    const comp3Col = mapping.comp3 || 'comp_3';
+    const historicalData = rows.map(r => {
+      const p  = num(r[actualTreatmentCol], avgPrice);
+      const q  = num(r[actualOutcomeCol],   avgDemand);
+      const c1 = num(r[comp1Col], p);
+      const c2 = num(r[comp2Col], p);
+      const c3 = num(r[comp3Col], p);
+      // Average of competitor prices as the competitor price control
+      const compPriceAvg = (c1 + c2 + c3) / 3;
+
+      // Holiday=1 or weekend=1 → promotion flag
+      const isPromo = num(r['holiday']) > 0 || num(r['weekend']) > 0;
+      // Month-based seasonality index (centered around 1.0)
+      const monthVal = num(r['month'], 6);
+      const seasonality = 1.0 + 0.08 * Math.sin((monthVal / 12) * 2 * Math.PI);
+
+      return {
+        price:             p,
+        unitsSold:         q,
+        competitorPrice:   compPriceAvg > 0 ? compPriceAvg : p,
+        isPromotionActive: isPromo,
+        seasonalityIndex:  seasonality,
+        customers:         num(r['customers'], 100),
+      };
+    }).filter(r => r.price > 0);
 
     // Run DML
     const dml = DMLSimulationService.estimateCausalElasticity({
@@ -118,9 +137,9 @@ export const runAnalysis = async (req, res, next) => {
       outcome_column:           actualOutcomeCol,
       sample_size:              T.length,
 
-      // Causal Treatment Effect (marginal dQ/dP)
+      // Causal Treatment Effect (marginal |dQ/dP|) — positive magnitude
       average_treatment_effect: dml.causalTreatmentEffect,
-      ate_units:                `Δ ${actualOutcomeCol} per $1 change in ${actualTreatmentCol}`,
+      ate_units:                `For every $1 rise in price, demand falls by ~${dml.causalTreatmentEffect.toFixed(2)} units`,
       
       // Price Elasticity (% Δ Q / % Δ P)
       price_elasticity:         dml.priceElasticity,

@@ -35,14 +35,14 @@ function formatEffect(v, res){
   const n=Number(v);
   if(!Number.isFinite(n))return String(v);
   if(res?.demo||(n>0&&n<1))return `+${(n*100).toFixed(1)}%`;
-  return `${n>0?"+":""}${n.toFixed(2)} units/$`;
+  // ATE is now positive magnitude — "X units per $1 price change"
+  return `${Math.abs(n).toFixed(3)} units / $1`;
 }
 function formatCI(v){
   if(!Array.isArray(v))return "Not provided";
   return `[${v.map(x=>{
     const n=Number(x);
     if(!Number.isFinite(n))return String(x);
-    if(Math.abs(n)<0.5&&n>0)return `${(n*100).toFixed(1)}%`;
-    return `${n.toFixed(2)}`;
+    return `${n.toFixed(3)}`;
   }).join(", ")}]`;
 }
