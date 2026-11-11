@@ -119,18 +119,18 @@ export default function AnalysisLab({ dataset, onNotice, onNavigate, setAnalysis
 
           {/* ── RECOMMENDED PRICE CARD ── */}
           {status==="success"&&optPrice!=null&&
-            <div style={{marginTop:"16px",padding:"18px 20px",borderRadius:"12px",background:"linear-gradient(135deg,#0f2744 0%,#071525 100%)",border:"2px solid #3b82f6",display:"flex",alignItems:"center",gap:"14px",boxShadow:"0 0 24px rgba(59,130,246,0.18)"}}>
-              <div style={{background:"#2563eb",borderRadius:"10px",padding:"12px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <div style={{marginTop:"16px",padding:"18px 20px",borderRadius:"12px",background:"linear-gradient(135deg,#1a0f35 0%,#0d0720 100%)",border:"2px solid #7c3aed",display:"flex",alignItems:"center",gap:"14px",boxShadow:"0 0 24px rgba(124,58,237,0.22)"}}>
+              <div style={{background:"#7c3aed",borderRadius:"10px",padding:"12px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                 <Tag size={24} color="#fff"/>
               </div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:"10px",fontWeight:700,letterSpacing:"0.12em",color:"#60a5fa",marginBottom:"5px",textTransform:"uppercase"}}>
+                <div style={{fontSize:"10px",fontWeight:700,letterSpacing:"0.12em",color:"#c4b5fd",marginBottom:"5px",textTransform:"uppercase"}}>
                   Recommended Price to Sell
                 </div>
                 <div style={{fontSize:"30px",fontWeight:800,color:"#f8fafc",lineHeight:1.1,letterSpacing:"-0.5px"}}>
-                  ${optPrice.toFixed(2)}&nbsp;<span style={{fontSize:"14px",fontWeight:500,color:"#93c5fd"}}>/ unit</span>
+                  ${optPrice.toFixed(2)}&nbsp;<span style={{fontSize:"14px",fontWeight:500,color:"#c4b5fd"}}>/ unit</span>
                 </div>
-                <div style={{fontSize:"11px",color:"#475569",marginTop:"4px"}}>{pricingMethod}</div>
+                <div style={{fontSize:"11px",color:"#6b7280",marginTop:"4px"}}>{pricingMethod}</div>
               </div>
               {profitLift&&
                 <div style={{textAlign:"center",background:"rgba(52,211,153,0.12)",border:"1px solid rgba(52,211,153,0.3)",borderRadius:"10px",padding:"10px 16px",flexShrink:0}}>
