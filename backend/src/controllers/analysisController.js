@@ -86,7 +86,9 @@ export const runAnalysis = async (req, res, next) => {
     // Build stats for DML engine
     const avgPrice  = T.reduce((s, v) => s + v, 0) / T.length;
     const avgDemand = Y.length > 0 ? Y.reduce((s, v) => s + v, 0) / Y.length : 1;
+    // Cost = 45% of price. Cap optimal price at 3× avgPrice to prevent blowout.
     const costPrice = avgPrice * 0.45;
+    const priceCap  = avgPrice * 3.0;
 
     // Build historicalData rows for the DML engine — include all confounders from CSV
     const comp2Col = mapping.comp2 || 'comp_2';
@@ -123,7 +125,7 @@ export const runAnalysis = async (req, res, next) => {
       costPrice,
       currentPrice: avgPrice,
       minPrice:     costPrice * 1.05,
-      maxPrice:     avgPrice * 2.0,
+      maxPrice:     priceCap,
     });
 
     const experimentId = `exp_${Date.now()}`;
@@ -139,7 +141,7 @@ export const runAnalysis = async (req, res, next) => {
 
       // Causal Treatment Effect (marginal |dQ/dP|) — positive magnitude
       average_treatment_effect: dml.causalTreatmentEffect,
-      ate_units:                `For every $1 rise in price, demand falls by ~${dml.causalTreatmentEffect.toFixed(2)} units`,
+      ate_units:                `For every $1 rise in price, demand falls by ~${dml.causalTreatmentEffect.toFixed(4)} units`,
       
       // Price Elasticity (% Δ Q / % Δ P)
       price_elasticity:         dml.priceElasticity,

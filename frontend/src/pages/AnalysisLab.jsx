@@ -5,8 +5,17 @@ import Panel from "../components/Panel";
 
 export default function AnalysisLab({ dataset, onNotice, onNavigate, setAnalysis }) {
   const cols=dataset?.headers||[];
-  const [treatment,setTreatment]=useState(dataset?.mapping?.treatment||"");
-  const [outcome,setOutcome]=useState(dataset?.mapping?.outcome||"");
+  // Smart default: prefer unit_price for treatment, qty for outcome
+  const tPriority = ["unit_price","price","discount","treatment"];
+  const yPriority = ["qty","quantity","units_sold","sales","demand","outcome"];
+  const findDefault = (priority, exclude="") => {
+    for(const p of priority){ const c=cols.find(h=>h.toLowerCase()===p||h.toLowerCase().includes(p)); if(c&&c!==exclude) return c; }
+    return "";
+  };
+  const defaultT = dataset?.mapping?.treatment || findDefault(tPriority);
+  const defaultY = dataset?.mapping?.outcome   || findDefault(yPriority, defaultT);
+  const [treatment,setTreatment]=useState(defaultT);
+  const [outcome,setOutcome]=useState(defaultY);
   const [covariates,setCovariates]=useState(dataset?.mapping?.covariates||[]);
   const [method,setMethod]=useState("double_ml");
   const [status,setStatus]=useState("idle");
@@ -36,7 +45,12 @@ function formatEffect(v, res){
   if(!Number.isFinite(n))return String(v);
   if(res?.demo||(n>0&&n<1))return `+${(n*100).toFixed(1)}%`;
   // ATE is now positive magnitude — "X units per $1 price change"
-  return `${Math.abs(n).toFixed(3)} units / $1`;
+  // Use enough decimal places so it never rounds to 0.000
+  const abs = Math.abs(n);
+  if(abs === 0) return "0 units / $1";
+  if(abs < 0.001) return `${abs.toExponential(2)} units / $1`;
+  if(abs < 0.1)   return `${abs.toFixed(4)} units / $1`;
+  return `${abs.toFixed(3)} units / $1`;
 }
 function formatCI(v){
   if(!Array.isArray(v))return "Not provided";

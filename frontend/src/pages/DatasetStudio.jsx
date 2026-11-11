@@ -33,10 +33,18 @@ export default function DatasetStudio({ dataset, setDataset, onNotice, onNavigat
       const cols=parseCSVLine(lines[0]); setHeaders(cols);
       setPreview(lines.slice(1).map(parseCSVLine));
       const lower=cols.map(c=>c.toLowerCase());
-      const t=lower.find(c=>["price","discount","promotion","treatment"].includes(c));
-      const y=lower.find(c=>["units_sold","sales","revenue","conversion_rate","outcome"].includes(c));
-      setMapping({treatment:cols[lower.indexOf(t)]||cols[0]||"",outcome:cols[lower.indexOf(y)]||cols[Math.min(1,cols.length-1)]||"",covariates:[]});
-      setDataset({file:f,name:f.name,size:f.size,headers:cols,preview:lines.slice(1).map(parseCSVLine),mapping:{treatment:cols[lower.indexOf(t)]||cols[0]||"",outcome:cols[lower.indexOf(y)]||cols[Math.min(1,cols.length-1)]||"",covariates:[]},backendStatus:"local"});
+      // Smart auto-map: prefer unit_price > price > first numeric-looking col for treatment
+      // prefer qty > quantity > units_sold > sales for outcome
+      const tPriority = ["unit_price","price","discount","promotion","treatment"];
+      const yPriority = ["qty","quantity","units_sold","sales","revenue","conversion_rate","outcome","demand"];
+      const findCol = (priority) => {
+        for(const p of priority){ const idx=lower.findIndex(c=>c===p||c.includes(p)); if(idx>=0) return cols[idx]; }
+        return null;
+      };
+      const tCol = findCol(tPriority) || cols[0] || "";
+      const yCol = findCol(yPriority) || cols.find(c=>c!==tCol) || cols[Math.min(1,cols.length-1)] || "";
+      setMapping({treatment:tCol,outcome:yCol,covariates:[]});
+      setDataset({file:f,name:f.name,size:f.size,headers:cols,preview:lines.slice(1).map(parseCSVLine),mapping:{treatment:tCol,outcome:yCol,covariates:[]},backendStatus:"local"});
     }catch(e){setError("Could not read this CSV file. Please check the file encoding and format.");}
   };
   const changeMapping=(key,value)=>{const next={...mapping,[key]:value};setMapping(next);if(file)setDataset({...dataset,file,name:file.name,size:file.size,headers,preview,mapping:next,backendStatus});};
